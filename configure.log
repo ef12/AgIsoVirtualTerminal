@@ -1,0 +1,64 @@
+﻿-- Selecting Windows SDK version 10.0.26100.0 to target Windows 10.0.26200.
+cmake : MSBuild version 17.14.40+3e7442088 for .NET Framework
+At line:1 char:1
++ cmake --preset windows-msvc-x64 2>&1 | Out-File -FilePath configure.l ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (MSBuild version... .NET Framework 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+  1>Checking Build System
+  Performing download step (git clone) for 'juce-populate'
+  Error removing directory "C:/Users/gr_efr/Documents/SW_Dev/open_agriculture/A
+gIsoVirtualTerminal/build/_deps/juce-src".
+  CMake Error at juce-subbuild/juce-populate-prefix/tmp/juce-populate-gitclone.
+cmake:30 (message):
+    Failed to remove directory:
+    'C:/Users/gr_efr/Documents/SW_Dev/open_agriculture/AgIsoVirtualTerminal/bui
+ld/_deps/juce-src'
+  
+  
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Microsof
+t\VC\v170\Microsoft.CppCommon.targets(254,5): error MSB8066: Custom build for '
+C:\Users\gr_efr\Documents\SW_Dev\open_agriculture\AgIsoVirtualTerminal\build\_d
+eps\juce-subbuild\CMakeFiles\d9e2d6e435c7f943236af38ada7d2cb9\juce-populate-dow
+nload.rule;C:\Users\gr_efr\Documents\SW_Dev\open_agriculture\AgIsoVirtualTermin
+al\build\_deps\juce-subbuild\CMakeFiles\d9e2d6e435c7f943236af38ada7d2cb9\juce-p
+opulate-update.rule;C:\Users\gr_efr\Documents\SW_Dev\open_agriculture\AgIsoVirt
+ualTerminal\build\_deps\juce-subbuild\CMakeFiles\d9e2d6e435c7f943236af38ada7d2c
+b9\juce-populate-patch.rule;C:\Users\gr_efr\Documents\SW_Dev\open_agriculture\A
+gIsoVirtualTerminal\build\_deps\juce-subbuild\CMakeFiles\d9e2d6e435c7f943236af3
+8ada7d2cb9\juce-populate-configure.rule;C:\Users\gr_efr\Documents\SW_Dev\open_a
+griculture\AgIsoVirtualTerminal\build\_deps\juce-subbuild\CMakeFiles\d9e2d6e435
+c7f943236af38ada7d2cb9\juce-populate-build.rule;C:\Users\gr_efr\Documents\SW_De
+v\open_agriculture\AgIsoVirtualTerminal\build\_deps\juce-subbuild\CMakeFiles\d9
+e2d6e435c7f943236af38ada7d2cb9\juce-populate-install.rule;C:\Users\gr_efr\Docum
+ents\SW_Dev\open_agriculture\AgIsoVirtualTerminal\build\_deps\juce-subbuild\CMa
+keFiles\d9e2d6e435c7f943236af38ada7d2cb9\juce-populate-test.rule;C:\Users\gr_ef
+r\Documents\SW_Dev\open_agriculture\AgIsoVirtualTerminal\build\_deps\juce-subbu
+ild\CMakeFiles\6528359ffafde6150b0a9b74058a0bd9\juce-populate-complete.rule;C:\
+Users\gr_efr\Documents\SW_Dev\open_agriculture\AgIsoVirtualTerminal\build\_deps
+\juce-subbuild\CMakeFiles\b818c6b32314a0f663c6351c4c32a068\juce-populate.rule;C
+:\Users\gr_efr\Documents\SW_Dev\open_agriculture\AgIsoVirtualTerminal\build\_de
+ps\juce-subbuild\CMakeLists.txt' exited with code 1. [C:\Users\gr_efr\Documents
+\SW_Dev\open_agriculture\AgIsoVirtualTerminal\build\_deps\juce-subbuild\juce-po
+pulate.vcxproj]
+
+CMake Error at C:/Program Files/CMake/share/cmake-4.3/Modules/FetchContent.cmak
+e:1931 (message):
+  Build step for juce failed: 1
+Call Stack (most recent call first):
+  C:/Program Files/CMake/share/cmake-4.3/Modules/FetchContent.cmake:1622 (__Fet
+chContent_populateSubbuild)
+  C:/Program Files/CMake/share/cmake-4.3/Modules/FetchContent.cmake:2158:EVAL:2
+ (__FetchContent_doPopulation)
+  C:/Program Files/CMake/share/cmake-4.3/Modules/FetchContent.cmake:2158 (cmake
+_language)
+  C:/Program Files/CMake/share/cmake-4.3/Modules/FetchContent.cmake:2399 (__Fet
+chContent_Populate)
+  cmake/FindJUCE.cmake:7 (FetchContent_MakeAvailable)
+  CMakeLists.txt:32 (find_package)
+
+
+-- Configuring incomplete, errors occurred!
