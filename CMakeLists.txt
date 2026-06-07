@@ -31,6 +31,7 @@ endif()
 
 find_package(JUCE MODULE)
 find_package(CAN_Stack MODULE)
+find_package(SIL MODULE)
 find_package(git_version MODULE)
 find_package(Threads REQUIRED)
 
@@ -103,7 +104,8 @@ target_sources(
           "src/Settings.cpp"
           "src/VT_NumberComponent.cpp"
           "src/TextDrawingComponent.cpp"
-          "src/StringDrawingComponent.cpp")
+          "src/StringDrawingComponent.cpp"
+          "src/SilVcanPlugin.cpp")
 
 target_include_directories(AgISOVirtualTerminal
                            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
@@ -112,6 +114,7 @@ target_link_libraries(
   AgISOVirtualTerminal
   PRIVATE juce::juce_gui_extra juce::juce_audio_basics juce::juce_audio_utils
           isobus::Isobus isobus::HardwareIntegration isobus::Utility
+          sil_lib
   PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags
          cmake_git_version_tracking)
 
