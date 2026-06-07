@@ -28,7 +28,7 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 #endif
 	canDrivers.push_back(std::make_shared<isobus::TouCANPlugin>(static_cast<std::int16_t>(0), 0));
 	canDrivers.push_back(std::make_shared<isobus::SysTecWindowsPlugin>());
-	canDrivers.push_back(std::make_shared<SilVcanPlugin>(7401, "127.0.0.1", 7402));
+	canDrivers.push_back(std::make_shared<SilVcanPlugin>(9000, "127.0.0.1", 9001));
 #elif defined(JUCE_MAC)
 	canDrivers.push_back(std::make_shared<isobus::MacCANPCANPlugin>(PCAN_USBBUS1));
 #else
@@ -36,7 +36,7 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 #endif
 
 	jassert(!canDrivers.empty()); // You need some kind of CAN interface to run this program!
-	isobus::CANHardwareInterface::set_number_of_can_channels(1);
+	isobus::CANHardwareInterface::set_number_of_can_channels(1, 512);
 
 	auto &config = isobus::CANNetworkManager::CANNetwork.get_configuration();
 	config.set_max_number_transport_protocol_sessions(256);

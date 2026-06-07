@@ -3,6 +3,7 @@
 ** @brief      AgIsoStack++ CAN hardware plugin wrapping the SIL virtual CAN
 *******************************************************************************/
 #include "SilVcanPlugin.hpp"
+#include "isobus/isobus/can_stack_logger.hpp"
 
 SilVcanPlugin::SilVcanPlugin(std::uint16_t localPort,
                              const std::string &remoteIp,
@@ -42,8 +43,17 @@ void SilVcanPlugin::open()
 	params.remote_ip = remoteIp.c_str();
 	params.remote_port = remotePort;
 	params.timeout_ms = timeoutMs;
+	params.max_pending_tx = 2000;
+	params.max_rx_queue = 2000;
 
-	sil_vcan_config_init(&silConfig, &params);
+	if (sil_vcan_config_init(&silConfig, &params))
+	{
+		isobus::CANStackLogger::info("[SIL vCAN]: Initialized on UDP " + std::to_string(localPort) + " <-> " + remoteIp + ":" + std::to_string(remotePort));
+	}
+	else
+	{
+		isobus::CANStackLogger::error("[SIL vCAN]: Failed to initialize on UDP " + std::to_string(localPort));
+	}
 }
 
 void SilVcanPlugin::close()
@@ -64,7 +74,12 @@ bool SilVcanPlugin::read_frame(isobus::CANMessageFrame &canFrame)
 	CanFrame frame{};
 	CanDriver *driver = sil_vcan_config_get_driver(&silConfig);
 
-	if ((nullptr == driver) || !can_driver_receive(driver, &frame))
+	if (nullptr == driver)
+	{
+		return false;
+	}
+
+	if (!can_driver_receive(driver, &frame))
 	{
 		return false;
 	}
