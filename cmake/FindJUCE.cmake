@@ -1,15 +1,11 @@
 if(NOT TARGET JUCE::JUCE)
-  # First, try to use an external JUCE installation if JUCE_ROOT is set
-  set(JUCE_ROOT_PATH "$ENV{JUCE_ROOT}" CACHE STRING "External JUCE installation path")
-  
-  if(JUCE_ROOT_PATH AND EXISTS "${JUCE_ROOT_PATH}/CMakeLists.txt")
-    message(STATUS "Using external JUCE from: ${JUCE_ROOT_PATH}")
-    add_subdirectory("${JUCE_ROOT_PATH}" "${CMAKE_BINARY_DIR}/JUCE")
+  set(JUCE_SUBMODULE_DIR "${CMAKE_CURRENT_LIST_DIR}/../external/JUCE")
+
+  if(EXISTS "${JUCE_SUBMODULE_DIR}/CMakeLists.txt")
+    message(STATUS "Using JUCE from submodule: ${JUCE_SUBMODULE_DIR}")
+    add_subdirectory("${JUCE_SUBMODULE_DIR}" "${CMAKE_BINARY_DIR}/JUCE")
   else()
-    if(JUCE_ROOT_PATH)
-      message(WARNING "JUCE_ROOT set to '${JUCE_ROOT_PATH}' but CMakeLists.txt not found")
-    endif()
-    message(STATUS "Using FetchContent to download JUCE framework")
+    message(STATUS "JUCE submodule not found, using FetchContent to download")
     include(FetchContent)
     FetchContent_Declare(
       JUCE

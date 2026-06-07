@@ -6,8 +6,14 @@
             "type": "shell",
             "command": "cmake",
             "args": [
-                "--preset",
-                "windows-msvc-x64",
+                "-S",
+                ".",
+                "-B",
+                "build",
+                "-G",
+                "Visual Studio 17 2022",
+                "-A",
+                "x64",
                 "-DBUILD_PRODUCTION=ON"
             ],
             "group": "build",
