@@ -20,7 +20,7 @@
             "problemMatcher": []
         },
         {
-            "label": "Build",
+            "label": "Build Debug",
             "type": "shell",
             "command": "cmake",
             "args": [
@@ -33,6 +33,19 @@
                 "kind": "build",
                 "isDefault": false
             },
+            "problemMatcher": "$msCompile"
+        },
+        {
+            "label": "Build Release",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "build",
+                "--config",
+                "Release"
+            ],
+            "group": "build",
             "problemMatcher": "$msCompile"
         },
         {
@@ -55,7 +68,7 @@
             "type": "shell",
             "command": "${workspaceFolder}/build/AgISOVirtualTerminal_artefacts/Debug/AgISOVirtualTerminal.exe",
             "group": "test",
-            "dependsOn": "Build",
+            "dependsOn": "Build Debug",
             "problemMatcher": []
         }
     ]
