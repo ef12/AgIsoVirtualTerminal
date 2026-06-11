@@ -16,9 +16,12 @@ jobs:
       - name: 'Install NSIS'
         run: |
           choco install nsis -y
-          echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $nsisDir = if (Test-Path "C:\Program Files (x86)\NSIS") { "C:\Program Files (x86)\NSIS" } else { "C:\Program Files\NSIS" }
+          echo $nsisDir >> $env:GITHUB_PATH
       - name: Compile
         run: |
+          $nsisDir = if (Test-Path "C:\Program Files (x86)\NSIS") { "C:\Program Files (x86)\NSIS" } else { "C:\Program Files\NSIS" }
+          $env:PATH = "$nsisDir;$env:PATH"
           mkdir build
           cmake -S . -B build -DBUILD_EXAMPLES=OFF -DBUILD_TESTING=OFF -Wno-dev
           cmake --build build --config Release --target package
