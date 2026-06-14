@@ -120,6 +120,8 @@ public:
 	void set_button_held(std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> workingSet, std::uint16_t objectID, std::uint16_t maskObjectID, std::uint8_t keyCode, bool isSoftKey);
 	void set_button_released(std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> workingSet, std::uint16_t objectID, std::uint16_t maskObjectID, std::uint8_t keyCode, bool isSoftKey);
 
+	bool send_pointing_event_message(std::uint16_t xPosition, std::uint16_t yPosition, KeyActivationCode touchState, std::uint16_t parentMaskObjectID, std::shared_ptr<isobus::ControlFunction> destination) const;
+
 	void repaint_on_next_update();
 
 	void save_settings();

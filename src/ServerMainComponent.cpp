@@ -9,6 +9,8 @@
 #include "JuceManagedWorkingSetCache.hpp"
 #include "Main.hpp"
 #include "ShortcutsWindow.hpp"
+#include "isobus/isobus/can_general_parameter_group_numbers.hpp"
+#include "isobus/isobus/can_network_manager.hpp"
 #include "isobus/utility/system_timing.hpp"
 
 #include "SoftKeyMaskRenderAreaComponent.hpp"
@@ -1280,6 +1282,44 @@ void ServerMainComponent::set_button_released(std::shared_ptr<isobus::VirtualTer
 	{
 		heldButtons.erase(found);
 	}
+}
+
+bool ServerMainComponent::send_pointing_event_message(std::uint16_t xPosition, std::uint16_t yPosition, KeyActivationCode touchState, std::uint16_t parentMaskObjectID, std::shared_ptr<isobus::ControlFunction> destination) const
+{
+	bool retVal = false;
+
+	if (nullptr != destination)
+	{
+		std::array<std::uint8_t, isobus::CAN_DATA_LENGTH> buffer;
+
+		buffer[0] = static_cast<std::uint8_t>(Function::PointingEventMessage);
+		buffer[1] = static_cast<std::uint8_t>(xPosition & 0xFF);
+		buffer[2] = static_cast<std::uint8_t>(xPosition >> 8);
+		buffer[3] = static_cast<std::uint8_t>(yPosition & 0xFF);
+		buffer[4] = static_cast<std::uint8_t>(yPosition >> 8);
+		buffer[5] = 0xFF;
+		buffer[6] = 0xFF;
+		buffer[7] = 0xFF;
+
+		if (get_version() >= VTVersion::Version4)
+		{
+			buffer[5] = static_cast<std::uint8_t>(touchState);
+		}
+
+		if (get_version() >= VTVersion::Version6)
+		{
+			buffer[6] = static_cast<std::uint8_t>(parentMaskObjectID & 0xFF);
+			buffer[7] = static_cast<std::uint8_t>(parentMaskObjectID >> 8);
+		}
+
+		retVal = isobus::CANNetworkManager::CANNetwork.send_can_message(static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::VirtualTerminalToECU),
+		                                                                 buffer.data(),
+		                                                                 isobus::CAN_DATA_LENGTH,
+		                                                                 get_internal_control_function(),
+		                                                                 destination,
+		                                                                 get_priority());
+	}
+	return retVal;
 }
 
 void ServerMainComponent::repaint_on_next_update()

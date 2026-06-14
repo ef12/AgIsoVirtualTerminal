@@ -79,6 +79,14 @@ void DataMaskRenderAreaComponent::mouseDown(const MouseEvent &event)
 			auto relativeEvent = event.getEventRelativeTo(this);
 			auto clickedObject = getClickedChildRecursive(activeMask, relativeEvent.getMouseDownX(), relativeEvent.getMouseDownY());
 
+			// Send VT Pointing Event (press) to the working set
+			ownerServer.send_pointing_event_message(static_cast<std::uint16_t>(relativeEvent.getMouseDownX()),
+			                                        static_cast<std::uint16_t>(relativeEvent.getMouseDownY()),
+			                                        isobus::VirtualTerminalBase::KeyActivationCode::ButtonPressedOrLatched,
+			                                        activeMask->get_id(),
+			                                        ownerServer.get_active_working_set()->get_control_function());
+			ownerServer.process_macro(activeMask, isobus::EventID::OnPointingEventPress, isobus::VirtualTerminalObjectType::DataMask, parentWorkingSet);
+
 			std::uint8_t keyCode = 1;
 
 			if (nullptr != clickedObject)
@@ -127,6 +135,14 @@ void DataMaskRenderAreaComponent::mouseUp(const MouseEvent &event)
 
 			auto relativeEvent = event.getEventRelativeTo(this);
 			auto clickedObject = getClickedChildRecursive(activeMask, relativeEvent.getMouseDownX(), relativeEvent.getMouseDownY());
+
+			// Send VT Pointing Event (release) to the working set
+			ownerServer.send_pointing_event_message(static_cast<std::uint16_t>(relativeEvent.getPosition().x),
+			                                        static_cast<std::uint16_t>(relativeEvent.getPosition().y),
+			                                        isobus::VirtualTerminalBase::KeyActivationCode::ButtonUnlatchedOrReleased,
+			                                        activeMask->get_id(),
+			                                        ownerServer.get_active_working_set()->get_control_function());
+			ownerServer.process_macro(activeMask, isobus::EventID::OnPointingEventRelease, isobus::VirtualTerminalObjectType::DataMask, parentWorkingSet);
 
 			std::uint8_t keyCode = 1;
 
