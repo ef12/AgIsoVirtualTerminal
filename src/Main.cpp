@@ -10,6 +10,10 @@
 #include "SilVcanPlugin.hpp"
 #include "git.h"
 
+#ifdef ISOBUS_WCAN_AVAILABLE
+#include "isobus/hardware_integration/wcan_plugin.hpp"
+#endif
+
 AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
                                                         const std::string &canLogPath,
                                                         int vtNumberCmdLineArg,
@@ -29,6 +33,14 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 	canDrivers.push_back(std::make_shared<isobus::TouCANPlugin>(static_cast<std::int16_t>(0), 0));
 	canDrivers.push_back(std::make_shared<isobus::SysTecWindowsPlugin>());
 	canDrivers.push_back(std::make_shared<SilVcanPlugin>(9000, "127.0.0.1", 9001));
+#ifdef ISOBUS_WCAN_AVAILABLE
+	// A shared-memory virtual bus. Any process opening the same bus name joins
+	// it, so the terminal, an implement simulation and test tooling can all be
+	// present at once without CAN hardware.
+	canDrivers.push_back(std::make_shared<isobus::WCANPlugin>("big_planter_isobus"));
+#else
+	canDrivers.push_back(nullptr);
+#endif
 #elif defined(JUCE_MAC)
 	canDrivers.push_back(std::make_shared<isobus::MacCANPCANPlugin>(PCAN_USBBUS1));
 #else
