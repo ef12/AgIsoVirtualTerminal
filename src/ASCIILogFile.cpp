@@ -103,10 +103,20 @@ ASCIILogFile::ASCIILogFile()
 			}
 			logFile.appendText("\n");
 		});
+		listenersRegistered = true;
 	}
 	else
 	{
 		RuntimePermissions::request(RuntimePermissions::writeExternalStorage, nullptr);
+	}
+}
+
+ASCIILogFile::~ASCIILogFile()
+{
+	if (listenersRegistered)
+	{
+		isobus::CANHardwareInterface::get_can_frame_received_event_dispatcher().remove_listener(canFrameReceivedListener);
+		isobus::CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().remove_listener(canFrameSentListener);
 	}
 }
 

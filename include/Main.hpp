@@ -73,6 +73,10 @@ public:
 	{
 		// Add your application's shutdown code here..
 
+		if (isobus::CANHardwareInterface::is_running())
+		{
+			isobus::CANHardwareInterface::stop();
+		}
 		mainWindow = nullptr; // (deletes our window)
 	}
 

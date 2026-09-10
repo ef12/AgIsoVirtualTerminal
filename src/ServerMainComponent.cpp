@@ -88,7 +88,7 @@ ServerMainComponent::ServerMainComponent(
 	diagnosticProtocol->set_software_id_field(0, AgISOVirtualTerminalApplication::getApplicationBuildInfo());
 	diagnosticProtocol->initialize();
 
-	isobus::CANHardwareInterface::get_periodic_update_event_dispatcher().add_listener([this]() {
+	periodicUpdateListener = isobus::CANHardwareInterface::get_periodic_update_event_dispatcher().add_listener([this]() {
 		diagnosticProtocol->update();
 	});
 
@@ -139,6 +139,11 @@ ServerMainComponent::ServerMainComponent(
 
 ServerMainComponent::~ServerMainComponent()
 {
+	if (isobus::CANHardwareInterface::is_running())
+	{
+		isobus::CANHardwareInterface::stop();
+	}
+	isobus::CANHardwareInterface::get_periodic_update_event_dispatcher().remove_listener(periodicUpdateListener);
 	canTrafficMonitor.set_dock_toggle_callback({});
 	if (canTrafficMonitorWindow)
 	{
@@ -753,6 +758,31 @@ void ServerMainComponent::resized()
 	}
 }
 
+bool ServerMainComponent::start_can_interface()
+{
+	auto selectedDriver = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0);
+	const std::string driverName = (nullptr != selectedDriver) ? selectedDriver->get_name() : "selected CAN driver";
+	isobus::CANStackLogger::info("Starting CAN interface using " + driverName);
+
+	if (isobus::CANHardwareInterface::start())
+	{
+		dataMaskRenderer.set_has_started(true);
+		hasStartBeenCalled = true;
+		return true;
+	}
+
+	dataMaskRenderer.set_has_started(false);
+	hasStartBeenCalled = false;
+	isobus::CANStackLogger::error("Failed to start CAN interface using " + driverName + ".");
+	AlertWindow::showAsync(MessageBoxOptions()
+	                         .withIconType(MessageBoxIconType::WarningIcon)
+	                         .withTitle("Failed to start CAN interface")
+	                         .withMessage("The " + String(driverName) + " driver could not be opened. Check the selected CAN configuration and application log, then try again.")
+	                         .withButton("OK"),
+	                       nullptr);
+	return false;
+}
+
 void ServerMainComponent::set_can_traffic_monitor_visible(bool shouldBeVisible)
 {
 	if (canTrafficMonitorShown == shouldBeVisible)
@@ -1226,29 +1256,32 @@ bool ServerMainComponent::perform(const InvocationInfo &info)
 				isobus::CANStackLogger::info("Stopping CAN interface");
 
 				// Save the frame handlers so we can re-add them after stopping the interface
-#ifdef JUCE_WINDOWS
-				auto canDriver0 = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0);
-				auto canDriver1 = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(1);
-				auto canDriver2 = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(2);
-				auto canDriver3 = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(3);
-#else
-				auto canDriver = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0);
-#endif
+				std::vector<std::shared_ptr<isobus::CANHardwarePlugin>> assignedDrivers;
+				const auto channelCount = isobus::CANHardwareInterface::get_number_of_can_channels();
+				assignedDrivers.reserve(channelCount);
+				for (std::uint8_t channel = 0; channel < channelCount; ++channel)
+				{
+					assignedDrivers.push_back(isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(channel));
+				}
 
-				isobus::CANHardwareInterface::stop();
-
-				// Since "Stop" clears all frame handlers, we need to re-add the ones we saved
-#ifdef JUCE_WINDOWS
-				isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, canDriver0);
-				isobus::CANHardwareInterface::assign_can_channel_frame_handler(1, canDriver1);
-				isobus::CANHardwareInterface::assign_can_channel_frame_handler(2, canDriver2);
-				isobus::CANHardwareInterface::assign_can_channel_frame_handler(3, canDriver3);
-#else
-				isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, canDriver);
-#endif
-
-				dataMaskRenderer.set_has_started(false);
-				hasStartBeenCalled = false;
+				if (isobus::CANHardwareInterface::stop())
+				{
+					// Stop clears frame-handler assignments. Restore only the configured
+					// channels so the same selection can be started again.
+					for (std::uint8_t channel = 0; channel < channelCount; ++channel)
+					{
+						if (nullptr != assignedDrivers[channel])
+						{
+							isobus::CANHardwareInterface::assign_can_channel_frame_handler(channel, assignedDrivers[channel]);
+						}
+					}
+					dataMaskRenderer.set_has_started(false);
+					hasStartBeenCalled = false;
+				}
+				else
+				{
+					isobus::CANStackLogger::error("Failed to stop CAN interface.");
+				}
 			}
 			else if (nullptr == isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0))
 			{
@@ -1260,10 +1293,7 @@ bool ServerMainComponent::perform(const InvocationInfo &info)
 			}
 			else
 			{
-				isobus::CANStackLogger::info("Starting CAN interface");
-				isobus::CANHardwareInterface::start();
-				dataMaskRenderer.set_has_started(true);
-				hasStartBeenCalled = true;
+				start_can_interface();
 			}
 			mCommandManager.commandStatusChanged();
 			retVal = true;
@@ -1987,10 +2017,8 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 
 				if (autostart)
 				{
-					isobus::CANHardwareInterface::start();
-					dataMaskRenderer.set_has_started(true);
-					hasStartBeenCalled = true;
 					isobus::CANStackLogger::info("AutoStart enabled. Starting CAN hardware interface.");
+					start_can_interface();
 				}
 			}
 

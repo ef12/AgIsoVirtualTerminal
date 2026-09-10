@@ -193,6 +193,7 @@ private:
 	void on_change_active_mask_callback(std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> affectedWorkingSet, std::uint16_t workingSet, std::uint16_t newMask);
 	void repaint_data_and_soft_key_mask();
 	void check_load_settings(std::shared_ptr<ValueTree> settings);
+	bool start_can_interface();
 	void set_can_traffic_monitor_visible(bool shouldBeVisible);
 	void set_can_traffic_monitor_docked(bool shouldBeDocked);
 	void show_detached_can_traffic_monitor();
@@ -223,6 +224,7 @@ private:
 	std::vector<std::shared_ptr<isobus::CANHardwarePlugin>> &parentCANDrivers;
 	std::vector<HeldButtonData> heldButtons;
 	std::set<std::string> loadedNames;
+	isobus::EventCallbackHandle periodicUpdateListener = 0;
 	std::uint32_t alarmAckKeyMaskId = isobus::NULL_OBJECT_ID;
 	int alarmAckKeyCode = juce::KeyPress::escapeKey;
 	std::uint8_t vtNumber = 1; // VT number in the range of 1-32

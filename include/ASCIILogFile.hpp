@@ -19,14 +19,15 @@ class ASCIILogFile
 public:
 	ASCIILogFile();
 
-	~ASCIILogFile() = default;
+	~ASCIILogFile();
 
 	std::string currentLogFile() const;
 
 private:
 	File logFile;
-	isobus::EventCallbackHandle canFrameReceivedListener;
-	isobus::EventCallbackHandle canFrameSentListener;
+	isobus::EventCallbackHandle canFrameReceivedListener = 0;
+	isobus::EventCallbackHandle canFrameSentListener = 0;
+	bool listenersRegistered = false;
 	Time initialTimestamp;
 };
 
