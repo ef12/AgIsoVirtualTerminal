@@ -120,7 +120,7 @@ On Windows, if you don't have Visual Studio 2022 installed, you will need to dow
 
 Only 64 bit builds are supported on Windows.
 
-The Windows build can use PEAK PCAN-Virtual without a physical CAN adapter. Install PEAK's CAN-API 2 virtual driver, then select **Configure → Configure CAN Hardware → PEAK PCAN Virtual** in the application. The terminal creates the named software-only network automatically at 250 kbit/s; configure the implement simulator with the same network name. The default network is `PCANLight_USB`.
+The Windows build uses an installed, architecture-matched PEAK CAN-API 2 runtime for both PCAN modes. Select **Configure → Configure CAN Hardware → PEAK PCAN USB** to use the `pcan_usb` device, or **PEAK PCAN Virtual** to use `pcan_virtual` without a physical CAN adapter. Hardware configuration is available only while the CAN interface is stopped. The USB network must already be associated with the adapter in PEAK Nets Configuration. The terminal creates a missing virtual network automatically at 250 kbit/s; configure the implement simulator with the same network name. The default network name is `PCANLight_USB`.
 
 Open **View → CAN Traffic Monitor** to inspect live transmitted and received CAN frames. The monitor provides pause, clear, and auto-scroll controls and keeps a bounded history to avoid unbounded memory use. Use **Undock** to move it into a separate resizable window, or **Dock** to attach it below the main terminal display. Its visibility and docking preference are restored on the next launch.
 

@@ -24,7 +24,12 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 {
 	int vtNumber = vtNumberCmdLineArg;
 #ifdef JUCE_WINDOWS
-	canDrivers.push_back(std::make_shared<isobus::PCANBasicWindowsPlugin>(static_cast<WORD>(PCAN_USBBUS1)));
+	canDrivers.push_back(std::make_shared<isobus::CANAPI2WindowsPlugin>("PCANLight_USB",
+	                                                                    "AgIsoVirtualTerminal",
+	                                                                    isobus::CANAPI2WindowsPlugin::DEFAULT_BITRATE,
+	                                                                    false,
+	                                                                    isobus::CANAPI2WindowsPlugin::DEFAULT_NET_HANDLE,
+	                                                                    isobus::CANAPI2WindowsPlugin::DeviceType::USB));
 #ifdef ISOBUS_WINDOWSINNOMAKERUSB2CAN_AVAILABLE
 	canDrivers.push_back(std::make_shared<isobus::InnoMakerUSB2CANWindowsPlugin>(0));
 #else
@@ -42,7 +47,12 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 	canDrivers.push_back(nullptr);
 #endif
 #ifdef ISOBUS_WINDOWSCANAPI2_AVAILABLE
-	canDrivers.push_back(std::make_shared<isobus::CANAPI2WindowsPlugin>("PCANLight_USB", "AgIsoVirtualTerminal"));
+	canDrivers.push_back(std::make_shared<isobus::CANAPI2WindowsPlugin>("PCANLight_USB",
+	                                                                    "AgIsoVirtualTerminal",
+	                                                                    isobus::CANAPI2WindowsPlugin::DEFAULT_BITRATE,
+	                                                                    true,
+	                                                                    isobus::CANAPI2WindowsPlugin::DEFAULT_NET_HANDLE,
+	                                                                    isobus::CANAPI2WindowsPlugin::DeviceType::Virtual));
 #else
 	canDrivers.push_back(nullptr);
 #endif

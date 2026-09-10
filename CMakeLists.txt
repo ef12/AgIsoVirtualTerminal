@@ -11,8 +11,7 @@ set(JUCE_WEB_BROWSER OFF)
 set(BUILD_TESTING OFF)
 
 if(WIN32)
-  set(CAN_DRIVER "WindowsPCANBasic")
-  list(APPEND CAN_DRIVER "WindowsCANAPI2")
+  set(CAN_DRIVER "WindowsCANAPI2")
   list(APPEND CAN_DRIVER "TouCAN")
 
   if(NOT (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND MINGW))
@@ -125,16 +124,6 @@ if(WIN32)
   add_custom_command(
     TARGET AgISOVirtualTerminal
     POST_BUILD
-    COMMENT "Copying PCANBasic.dll to the build directory"
-    COMMAND
-      "${CMAKE_COMMAND}" -E copy_if_different
-      ${CMAKE_CURRENT_LIST_DIR}/lib/PCANBasic.dll
-      "$<TARGET_FILE_DIR:AgISOVirtualTerminal>"
-    VERBATIM)
-
-  add_custom_command(
-    TARGET AgISOVirtualTerminal
-    POST_BUILD
     COMMENT "Copying Usbcan64.dll to the build directory"
     COMMAND
       "${CMAKE_COMMAND}" -E copy_if_different
@@ -176,10 +165,6 @@ endif()
 if(MSVC)
   install(
     FILES ${CMAKE_CURRENT_LIST_DIR}/lib/Usbcan64.dll
-    DESTINATION bin
-    COMPONENT applications)
-  install(
-    FILES ${CMAKE_CURRENT_LIST_DIR}/lib/PCANBasic.dll
     DESTINATION bin
     COMPONENT applications)
   install(

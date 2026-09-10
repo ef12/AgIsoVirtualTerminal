@@ -20,10 +20,17 @@
 #ifdef JUCE_WINDOWS
 namespace
 {
+	constexpr int PCAN_USB_SELECTOR_ID = 1;
 	constexpr int TOUCAN_SELECTOR_ID = 3;
-	constexpr int CAN_API2_SELECTOR_ID = 7;
+	constexpr int PCAN_VIRTUAL_SELECTOR_ID = 7;
 	constexpr std::size_t TOUCAN_DRIVER_INDEX = 2;
-	constexpr std::size_t CAN_API2_DRIVER_INDEX = 6;
+	constexpr std::size_t PCAN_VIRTUAL_DRIVER_INDEX = 6;
+
+	bool is_pcan_api2_selector(int selectorID)
+	{
+		return (PCAN_USB_SELECTOR_ID == selectorID) ||
+		  (PCAN_VIRTUAL_SELECTOR_ID == selectorID);
+	}
 }
 #endif
 
@@ -60,8 +67,19 @@ ConfigureHardwareComponent::ConfigureHardwareComponent(ConfigureHardwareWindow &
 	hardwareInterfaceSelector.setSize(getWidth() - 20, 30);
 	hardwareInterfaceSelector.setTopLeftPosition(10, 80);
 	hardwareInterfaceSelector.onChange = [this]() {
-		touCANSerialEditor.setVisible(TOUCAN_SELECTOR_ID == hardwareInterfaceSelector.getSelectedId());
-		canAPI2NetNameEditor.setVisible(CAN_API2_SELECTOR_ID == hardwareInterfaceSelector.getSelectedId());
+		const int selectedID = hardwareInterfaceSelector.getSelectedId();
+		touCANSerialEditor.setVisible(TOUCAN_SELECTOR_ID == selectedID);
+		canAPI2NetNameEditor.setVisible(is_pcan_api2_selector(selectedID));
+		if (is_pcan_api2_selector(selectedID) &&
+		    (selectedID > 0) &&
+		    (static_cast<std::size_t>(selectedID) <= parentCANDrivers.size()))
+		{
+			auto selectedDriver = std::dynamic_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(selectedID - 1));
+			if (selectedDriver)
+			{
+				canAPI2NetNameEditor.setText(String(selectedDriver->get_net_name()), false);
+			}
+		}
 		repaint();
 	};
 	addAndMakeVisible(hardwareInterfaceSelector);
@@ -75,15 +93,16 @@ ConfigureHardwareComponent::ConfigureHardwareComponent(ConfigureHardwareWindow &
 	addChildComponent(touCANSerialEditor);
 
 	auto netNameFilter = new TextEditor::LengthAndCharacterRestriction(20, String());
-	canAPI2NetNameEditor.setName("PCAN-Virtual Network Name");
-	canAPI2NetNameEditor.setText(String(std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(CAN_API2_DRIVER_INDEX))->get_net_name()));
+	canAPI2NetNameEditor.setName("PCAN Network Name");
+	const std::size_t initiallyDisplayedPCANDriver = (PCAN_USB_SELECTOR_ID == selectedID) ? 0 : PCAN_VIRTUAL_DRIVER_INDEX;
+	canAPI2NetNameEditor.setText(String(std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(initiallyDisplayedPCANDriver))->get_net_name()));
 	canAPI2NetNameEditor.setSize(getWidth() - 20, 30);
 	canAPI2NetNameEditor.setTopLeftPosition(10, 140);
 	canAPI2NetNameEditor.setInputFilter(netNameFilter, true);
 	canAPI2NetNameEditor.setTooltip("Use the same CAN-API 2 network name in the implement simulator.");
 	addChildComponent(canAPI2NetNameEditor);
 	touCANSerialEditor.setVisible(TOUCAN_SELECTOR_ID == selectedID);
-	canAPI2NetNameEditor.setVisible(CAN_API2_SELECTOR_ID == selectedID);
+	canAPI2NetNameEditor.setVisible(is_pcan_api2_selector(selectedID));
 #elif JUCE_LINUX
 	socketCANNameEditor.setName("SocketCAN Interface Name");
 	socketCANNameEditor.setText(std::static_pointer_cast<isobus::SocketCANInterface>(parentCANDrivers.at(0))->get_device_name());
@@ -93,19 +112,57 @@ ConfigureHardwareComponent::ConfigureHardwareComponent(ConfigureHardwareWindow &
 #endif
 	okButton.onClick = [this, &parent]() {
 #ifdef JUCE_WINDOWS
-		if (TOUCAN_SELECTOR_ID == hardwareInterfaceSelector.getSelectedId())
+		if (isobus::CANHardwareInterface::is_running())
+		{
+			AlertWindow::showAsync(MessageBoxOptions()
+			                         .withIconType(MessageBoxIconType::WarningIcon)
+			                         .withTitle("CAN interface is running")
+			                         .withMessage("Stop the CAN interface before changing its driver.")
+			                         .withButton("OK"),
+			                       nullptr);
+			return;
+		}
+
+		const int selectedID = hardwareInterfaceSelector.getSelectedId();
+		if ((selectedID <= 0) ||
+		    (static_cast<std::size_t>(selectedID) > parentCANDrivers.size()))
+		{
+			AlertWindow::showAsync(MessageBoxOptions()
+			                         .withIconType(MessageBoxIconType::WarningIcon)
+			                         .withTitle("Invalid CAN driver selection")
+			                         .withMessage("Select a CAN driver before applying the hardware configuration.")
+			                         .withButton("OK"),
+			                       nullptr);
+			return;
+		}
+		const auto selectedDriver = parentCANDrivers.at(selectedID - 1);
+		if (nullptr == selectedDriver)
+		{
+			AlertWindow::showAsync(MessageBoxOptions()
+			                         .withIconType(MessageBoxIconType::WarningIcon)
+			                         .withTitle("CAN driver unavailable")
+			                         .withMessage("The selected CAN driver is not available in this build.")
+			                         .withButton("OK"),
+			                       nullptr);
+			return;
+		}
+
+		if (TOUCAN_SELECTOR_ID == selectedID)
 		{
 			int serial = touCANSerialEditor.getText().trim().getIntValue();
-			std::static_pointer_cast<isobus::TouCANPlugin>(parentCANDrivers.at(hardwareInterfaceSelector.getSelectedId() - 1))->reconfigure(0, static_cast<std::uint32_t>(serial));
+			std::static_pointer_cast<isobus::TouCANPlugin>(selectedDriver)->reconfigure(0, static_cast<std::uint32_t>(serial));
 		}
-		else if (CAN_API2_SELECTOR_ID == hardwareInterfaceSelector.getSelectedId())
+		else if (is_pcan_api2_selector(selectedID))
 		{
-			auto canAPI2Driver = std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(CAN_API2_DRIVER_INDEX));
-			if (!canAPI2Driver->configure(canAPI2NetNameEditor.getText().trim().toStdString()))
+			auto canAPI2Driver = std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(selectedDriver);
+			const bool createMissingNet = (isobus::CANAPI2WindowsPlugin::DeviceType::Virtual == canAPI2Driver->get_device_type());
+			if (!canAPI2Driver->configure(canAPI2NetNameEditor.getText().trim().toStdString(),
+			                              isobus::CANAPI2WindowsPlugin::DEFAULT_BITRATE,
+			                              createMissingNet))
 			{
 				AlertWindow::showAsync(MessageBoxOptions()
 				                         .withIconType(MessageBoxIconType::WarningIcon)
-				                         .withTitle("Invalid PCAN-Virtual network name")
+				                         .withTitle("Invalid PCAN network name")
 				                         .withMessage("Enter a network name containing between 1 and 20 bytes.")
 				                         .withButton("OK"),
 				                       nullptr);
@@ -113,12 +170,37 @@ ConfigureHardwareComponent::ConfigureHardwareComponent(ConfigureHardwareWindow &
 			}
 		}
 
-		if (nullptr != isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0))
+		const auto previousDriver = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0);
+		if (previousDriver != selectedDriver)
 		{
-			isobus::CANHardwareInterface::unassign_can_channel_frame_handler(0);
+			if ((nullptr != previousDriver) &&
+			    (!isobus::CANHardwareInterface::unassign_can_channel_frame_handler(0)))
+			{
+				AlertWindow::showAsync(MessageBoxOptions()
+				                         .withIconType(MessageBoxIconType::WarningIcon)
+				                         .withTitle("Could not change CAN driver")
+				                         .withMessage("The current CAN driver could not be unassigned.")
+				                         .withButton("OK"),
+				                       nullptr);
+				return;
+			}
+
+			if (!isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, selectedDriver))
+			{
+				if (nullptr != previousDriver)
+				{
+					isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, previousDriver);
+				}
+				AlertWindow::showAsync(MessageBoxOptions()
+				                         .withIconType(MessageBoxIconType::WarningIcon)
+				                         .withTitle("Could not change CAN driver")
+				                         .withMessage("The selected CAN driver could not be assigned. The previous selection was restored.")
+				                         .withButton("OK"),
+				                       nullptr);
+				return;
+			}
 		}
-		isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, parentCANDrivers.at(hardwareInterfaceSelector.getSelectedId() - 1));
-		isobus::CANStackLogger::info("Updated assigned CAN driver.");
+		isobus::CANStackLogger::info("Updated assigned CAN driver to " + selectedDriver->get_name() + ".");
 #elif JUCE_LINUX
 		std::static_pointer_cast<isobus::SocketCANInterface>(parentCANDrivers.at(0))->set_name(socketCANNameEditor.getText().toStdString());
 		isobus::CANStackLogger::info("Updated socket CAN interface name to: " + socketCANNameEditor.getText().toStdString());
@@ -149,10 +231,11 @@ void ConfigureHardwareComponent::paint(Graphics &graphics)
 	{
 		graphics.drawFittedText("TouCAN Serial Number", touCANSerialEditor.getBounds().getX(), touCANSerialEditor.getBounds().getY() - 14, touCANSerialEditor.getBounds().getWidth(), 12, Justification::centredLeft, 1);
 	}
-	else if (CAN_API2_SELECTOR_ID == hardwareInterfaceSelector.getSelectedId())
+	else if (is_pcan_api2_selector(hardwareInterfaceSelector.getSelectedId()))
 	{
-		graphics.drawFittedText("PCAN-Virtual Network Name", canAPI2NetNameEditor.getBounds().getX(), canAPI2NetNameEditor.getBounds().getY() - 14, canAPI2NetNameEditor.getBounds().getWidth(), 12, Justification::centredLeft, 1);
-		graphics.drawFittedText("Use the same network name in the implement simulator. The default is PCANLight_USB.", 10, 175, getWidth() - 20, 20, Justification::centredLeft, 1);
+		graphics.drawFittedText("PCAN Network Name", canAPI2NetNameEditor.getBounds().getX(), canAPI2NetNameEditor.getBounds().getY() - 14, canAPI2NetNameEditor.getBounds().getWidth(), 12, Justification::centredLeft, 1);
+		const String helpText = (PCAN_VIRTUAL_SELECTOR_ID == hardwareInterfaceSelector.getSelectedId()) ? "The virtual network is created if missing. Use the same name in the implement simulator." : "The network must be configured for the PCAN-USB adapter in PEAK Nets Configuration.";
+		graphics.drawFittedText(helpText, 10, 175, getWidth() - 20, 32, Justification::centredLeft, 2);
 	}
 #elif JUCE_LINUX
 	graphics.drawFittedText("Socket CAN Interface Name", socketCANNameEditor.getBounds().getX(), socketCANNameEditor.getBounds().getY() - 14, socketCANNameEditor.getBounds().getWidth(), 12, Justification::centredLeft, 1);
