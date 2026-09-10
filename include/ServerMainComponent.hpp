@@ -107,6 +107,7 @@ public:
 
 	void paint(juce::Graphics &g) override;
 	void resized() override;
+	void mouseUp(const juce::MouseEvent &event) override;
 
 	ApplicationCommandTarget *getNextCommandTarget() override;
 	void getAllCommands(juce::Array<juce::CommandID> &allCommands) override;
@@ -194,6 +195,9 @@ private:
 	void repaint_data_and_soft_key_mask();
 	void check_load_settings(std::shared_ptr<ValueTree> settings);
 	bool start_can_interface();
+	void configure_horizontal_layout();
+	void configure_vertical_layout();
+	void set_logger_visible(bool shouldBeVisible);
 	void set_can_traffic_monitor_visible(bool shouldBeVisible);
 	void set_can_traffic_monitor_docked(bool shouldBeDocked);
 	void show_detached_can_traffic_monitor();
@@ -208,6 +212,17 @@ private:
 	WorkingSetSelectorComponent workingSetSelector;
 	DataMaskRenderAreaComponent dataMaskRenderer;
 	SoftKeyMaskRenderAreaComponent softKeyMaskRenderer;
+	juce::Component terminalPane;
+	juce::Viewport workingSetViewport;
+	juce::Viewport dataMaskViewport;
+	juce::Viewport softKeyMaskViewport;
+	juce::Component canTrafficDockPane;
+	juce::StretchableLayoutManager horizontalLayout;
+	juce::StretchableLayoutManager verticalLayout;
+	juce::StretchableLayoutResizerBar workingSetResizeBar;
+	juce::StretchableLayoutResizerBar softKeyResizeBar;
+	juce::StretchableLayoutResizerBar loggerResizeBar;
+	juce::StretchableLayoutResizerBar canTrafficResizeBar;
 	MenuBarComponent menuBar;
 	LoggerComponent logger;
 	Viewport loggerViewport;
@@ -237,6 +252,15 @@ private:
 	bool saveIopBeforeParse = false;
 	bool canTrafficMonitorShown = false;
 	bool canTrafficMonitorDocked = true;
+	int workingSetPaneWidth = WorkingSetSelectorComponent::WIDTH;
+	int softKeyPaneWidth = 0;
+	int loggerPaneHeight = LoggerComponent::HEIGHT;
+	int canTrafficPaneHeight = CANTrafficMonitorComponent::DOCKED_HEIGHT;
+
+	static constexpr int LAYOUT_RESIZER_SIZE = 6;
+	static constexpr int MIN_TERMINAL_PANE_HEIGHT = 160;
+	static constexpr int MIN_LOGGER_PANE_HEIGHT = 80;
+	static constexpr int MIN_CAN_TRAFFIC_PANE_HEIGHT = 120;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ServerMainComponent)
 };

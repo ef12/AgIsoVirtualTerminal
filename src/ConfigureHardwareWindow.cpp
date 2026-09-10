@@ -12,6 +12,8 @@ ConfigureHardwareWindow::ConfigureHardwareWindow(ServerMainComponent &parentComp
   content(*this, canDrivers)
 {
 	setOpaque(true);
+	setResizable(true, true);
+	setResizeLimits(360, 260, 900, 700);
 	setSize(400, 280);
 	content.setSize(400, 280);
 	setContentNonOwned(&content, false);

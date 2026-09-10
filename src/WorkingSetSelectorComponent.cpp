@@ -13,7 +13,7 @@ WorkingSetSelectorComponent::WorkingSetSelectorComponent(ServerMainComponent &se
   parentServer(server)
 {
 	setOpaque(false);
-	setBounds(0, 0, WIDTH, server.minimum_height());
+	setSize(WIDTH, server.minimum_height());
 }
 
 void WorkingSetSelectorComponent::update_drawn_working_sets(std::vector<std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet>> &managedWorkingSetList)
@@ -60,7 +60,6 @@ void WorkingSetSelectorComponent::paint(Graphics &g)
 
 void WorkingSetSelectorComponent::resized()
 {
-	setBounds(0, 0, WIDTH, parentServer.minimum_height());
 }
 
 void WorkingSetSelectorComponent::redraw()

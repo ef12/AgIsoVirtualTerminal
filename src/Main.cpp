@@ -104,6 +104,7 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 	setFullScreen(true);
 #else
 	setResizable(true, true);
+	setResizeLimits(360, 420, 8192, 8192);
 	centreWithSize(getWidth(), getHeight());
 #endif
 

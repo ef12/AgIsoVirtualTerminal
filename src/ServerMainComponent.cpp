@@ -44,7 +44,17 @@ ServerMainComponent::ServerMainComponent(
   const std::string &canLogPath_,
   std::uint8_t vtNumberArg,
   std::string screenCaptureDir) :
-  VirtualTerminalServer(serverControlFunction), screenCaptureDirArgument(screenCaptureDir), workingSetSelector(*this), dataMaskRenderer(*this), softKeyMaskRenderer(*this), parentCANDrivers(canDrivers), canLogPath(canLogPath_)
+  VirtualTerminalServer(serverControlFunction),
+  screenCaptureDirArgument(screenCaptureDir),
+  canLogPath(canLogPath_),
+  workingSetSelector(*this),
+  dataMaskRenderer(*this),
+  softKeyMaskRenderer(*this),
+  workingSetResizeBar(&horizontalLayout, 1, true),
+  softKeyResizeBar(&horizontalLayout, 3, true),
+  loggerResizeBar(&verticalLayout, 1, false),
+  canTrafficResizeBar(&verticalLayout, 3, false),
+  parentCANDrivers(canDrivers)
 {
 	isobus::CANStackLogger::set_can_stack_logger_sink(&logger);
 	isobus::CANStackLogger::set_log_level(isobus::CANStackLogger::LoggingLevel::Info);
@@ -94,24 +104,58 @@ ServerMainComponent::ServerMainComponent(
 
 	mAudioDeviceManager.initialise(0, 1, nullptr, true);
 	mAudioDeviceManager.addAudioCallback(&mSoundPlayer);
-	addAndMakeVisible(workingSetSelector);
-	addAndMakeVisible(dataMaskRenderer);
-	addAndMakeVisible(softKeyMaskRenderer);
+
+	if ((0 == dataMaskRenderer.getWidth()) || (0 == dataMaskRenderer.getHeight()))
+	{
+		dataMaskRenderer.setSize(480, 480);
+	}
+	if ((0 == softKeyMaskRenderer.getWidth()) || (0 == softKeyMaskRenderer.getHeight()))
+	{
+		softKeyMaskRenderer.setSize(softKeyMaskDimensions.total_width(), dataMaskRenderer.getHeight());
+	}
+	if (0 == softKeyPaneWidth)
+	{
+		softKeyPaneWidth = softKeyMaskRenderer.getWidth();
+	}
+
+	terminalPane.setInterceptsMouseClicks(false, false);
+	addAndMakeVisible(terminalPane);
+	workingSetViewport.setViewedComponent(&workingSetSelector, false);
+	dataMaskViewport.setViewedComponent(&dataMaskRenderer, false);
+	softKeyMaskViewport.setViewedComponent(&softKeyMaskRenderer, false);
+	addAndMakeVisible(workingSetViewport);
+	addAndMakeVisible(workingSetResizeBar);
+	addAndMakeVisible(dataMaskViewport);
+	addAndMakeVisible(softKeyResizeBar);
+	addAndMakeVisible(softKeyMaskViewport);
+	addAndMakeVisible(loggerResizeBar);
 	addChildComponent(loggerViewport);
-	addChildComponent(vtNumberComponent);
+	addChildComponent(canTrafficResizeBar);
+	addChildComponent(canTrafficDockPane);
+	dataMaskRenderer.addChildComponent(vtNumberComponent);
 	canTrafficMonitor.set_is_docked(canTrafficMonitorDocked);
 	if (canTrafficMonitorShown && canTrafficMonitorDocked)
 	{
-		addAndMakeVisible(canTrafficMonitor);
+		addAndMakeVisible(canTrafficDockPane);
+		canTrafficDockPane.addAndMakeVisible(canTrafficMonitor);
 	}
+	workingSetResizeBar.addMouseListener(this, false);
+	softKeyResizeBar.addMouseListener(this, false);
+	loggerResizeBar.addMouseListener(this, false);
+	canTrafficResizeBar.addMouseListener(this, false);
+	configure_horizontal_layout();
+	configure_vertical_layout();
 	vtNumber = vtNumberArg;
 	menuBar.setModel(this);
 	addAndMakeVisible(menuBar);
 
 	// Make sure you set the size of the component after
 	// you add any child components.
-	setSize(WorkingSetSelectorComponent::WIDTH + get_data_mask_area_size_x_pixels() + softKeyMaskDimensions.total_width(),
-	        minimum_height() + LoggerComponent::HEIGHT + ((canTrafficMonitorShown && canTrafficMonitorDocked) ? CANTrafficMonitorComponent::DOCKED_HEIGHT : 0));
+	const int lMenuBarHeight = juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight();
+	const int initialLoggerHeight = loggerViewport.isVisible() ? loggerPaneHeight + LAYOUT_RESIZER_SIZE : 0;
+	const int initialTrafficHeight = (canTrafficMonitorShown && canTrafficMonitorDocked) ? canTrafficPaneHeight + LAYOUT_RESIZER_SIZE : 0;
+	setSize(workingSetPaneWidth + get_data_mask_area_size_x_pixels() + softKeyPaneWidth + (2 * LAYOUT_RESIZER_SIZE),
+	        lMenuBarHeight + minimum_height() + initialLoggerHeight + initialTrafficHeight);
 	if (canTrafficMonitorShown && !canTrafficMonitorDocked)
 	{
 		Component::SafePointer<ServerMainComponent> safeThis(this);
@@ -123,9 +167,6 @@ ServerMainComponent::ServerMainComponent(
 		});
 	}
 
-	workingSetSelector.setTopLeftPosition(0, juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight());
-
-	logger.setTopLeftPosition(0, get_data_mask_area_size_y_pixels());
 	logger.setSize(getWidth(), LoggerComponent::HEIGHT);
 	loggerViewport.setViewedComponent(&logger, false);
 
@@ -726,36 +767,126 @@ void ServerMainComponent::paint(juce::Graphics &g)
 
 void ServerMainComponent::resized()
 {
-	// This is called when the MainContentComponent is resized.
-	// If you add any child components, this is where you should
-	// update their positions.
-	auto lMenuBarHeight = juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight();
-	auto lBounds = getLocalBounds();
+	auto bounds = getLocalBounds();
+	const int menuBarHeight = juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight();
+	menuBar.setBounds(bounds.removeFromTop(menuBarHeight));
 
-	workingSetSelector.setBounds(0, lMenuBarHeight, WorkingSetSelectorComponent::WIDTH, minimum_height());
-	dataMaskRenderer.setBounds(WorkingSetSelectorComponent::WIDTH, lMenuBarHeight, get_data_mask_area_size_x_pixels(), get_data_mask_area_size_y_pixels());
-	vtNumberComponent.setBounds(dataMaskRenderer.getBounds().getX() + (dataMaskRenderer.getWidth() / 4.0),
-	                            dataMaskRenderer.getBounds().getY() + (dataMaskRenderer.getHeight() / 10.0),
-	                            dataMaskRenderer.getBounds().getWidth() / 2.0,
-	                            (dataMaskRenderer.getBounds().getHeight() / 10.0) * 8);
-	softKeyMaskRenderer.setBounds(WorkingSetSelectorComponent::WIDTH + get_data_mask_area_size_x_pixels(),
-	                              lMenuBarHeight,
-	                              2 * SoftKeyMaskDimensions::PADDING + get_physical_soft_key_columns() * (SoftKeyMaskDimensions::PADDING + get_soft_key_descriptor_y_pixel_height()),
-	                              get_data_mask_area_size_y_pixels());
-	const int dockedMonitorHeight = (canTrafficMonitorShown && canTrafficMonitorDocked) ? CANTrafficMonitorComponent::DOCKED_HEIGHT : 0;
-	const int dockedMonitorTop = getHeight() - dockedMonitorHeight;
-	loggerViewport.setBounds(0, minimum_height(), getWidth(), std::max(0, dockedMonitorTop - minimum_height()));
-	if (dockedMonitorHeight > 0)
+	Component *verticalComponents[] = {
+		&terminalPane,
+		&loggerResizeBar,
+		&loggerViewport,
+		&canTrafficResizeBar,
+		&canTrafficDockPane
+	};
+	verticalLayout.layOutComponents(verticalComponents,
+	                                static_cast<int>(std::size(verticalComponents)),
+	                                bounds.getX(),
+	                                bounds.getY(),
+	                                bounds.getWidth(),
+	                                bounds.getHeight(),
+	                                true,
+	                                true);
+
+	Component *horizontalComponents[] = {
+		&workingSetViewport,
+		&workingSetResizeBar,
+		&dataMaskViewport,
+		&softKeyResizeBar,
+		&softKeyMaskViewport
+	};
+	const auto terminalBounds = terminalPane.getBounds();
+	horizontalLayout.layOutComponents(horizontalComponents,
+	                                  static_cast<int>(std::size(horizontalComponents)),
+	                                  terminalBounds.getX(),
+	                                  terminalBounds.getY(),
+	                                  terminalBounds.getWidth(),
+	                                  terminalBounds.getHeight(),
+	                                  false,
+	                                  true);
+
+	workingSetPaneWidth = horizontalLayout.getItemCurrentAbsoluteSize(0);
+	softKeyPaneWidth = horizontalLayout.getItemCurrentAbsoluteSize(4);
+	if (loggerViewport.isVisible())
 	{
-		canTrafficMonitor.setBounds(0, dockedMonitorTop, getWidth(), dockedMonitorHeight);
+		loggerPaneHeight = verticalLayout.getItemCurrentAbsoluteSize(2);
 	}
-	menuBar.setBounds(lBounds.removeFromTop(lMenuBarHeight));
+	if (canTrafficMonitorShown && canTrafficMonitorDocked)
+	{
+		canTrafficPaneHeight = verticalLayout.getItemCurrentAbsoluteSize(4);
+	}
+
+	workingSetSelector.setSize(WorkingSetSelectorComponent::WIDTH,
+	                           std::max(minimum_height(), workingSetViewport.getHeight()));
+	vtNumberComponent.setBounds(dataMaskRenderer.getWidth() / 4,
+	                            dataMaskRenderer.getHeight() / 10,
+	                            dataMaskRenderer.getWidth() / 2,
+	                            (dataMaskRenderer.getHeight() * 8) / 10);
+	if (&canTrafficDockPane == canTrafficMonitor.getParentComponent())
+	{
+		canTrafficMonitor.setBounds(canTrafficDockPane.getLocalBounds());
+	}
 	logger.setSize(loggerViewport.getWidth(), logger.getHeight());
 
 	if (logger.getHeight() < loggerViewport.getHeight())
 	{
 		logger.setSize(loggerViewport.getWidth(), loggerViewport.getHeight());
 	}
+}
+
+void ServerMainComponent::mouseUp(const juce::MouseEvent &event)
+{
+	if ((event.eventComponent == &workingSetResizeBar) ||
+	    (event.eventComponent == &softKeyResizeBar) ||
+	    (event.eventComponent == &loggerResizeBar) ||
+	    (event.eventComponent == &canTrafficResizeBar))
+	{
+		save_settings();
+	}
+}
+
+void ServerMainComponent::configure_horizontal_layout()
+{
+	horizontalLayout.setItemLayout(0, WorkingSetSelectorComponent::BUTTON_WIDTH, 260, workingSetPaneWidth);
+	horizontalLayout.setItemLayout(1, LAYOUT_RESIZER_SIZE, LAYOUT_RESIZER_SIZE, LAYOUT_RESIZER_SIZE);
+	horizontalLayout.setItemLayout(2, 160, -1.0, -1.0);
+	horizontalLayout.setItemLayout(3, LAYOUT_RESIZER_SIZE, LAYOUT_RESIZER_SIZE, LAYOUT_RESIZER_SIZE);
+	horizontalLayout.setItemLayout(4, 80, 500, softKeyPaneWidth);
+}
+
+void ServerMainComponent::configure_vertical_layout()
+{
+	const bool loggerShown = loggerViewport.isVisible();
+	const bool trafficDockedAndShown = canTrafficMonitorShown && canTrafficMonitorDocked;
+
+	verticalLayout.setItemLayout(0, MIN_TERMINAL_PANE_HEIGHT, -1.0, -1.0);
+	verticalLayout.setItemLayout(1,
+	                             loggerShown ? LAYOUT_RESIZER_SIZE : 0,
+	                             loggerShown ? LAYOUT_RESIZER_SIZE : 0,
+	                             loggerShown ? LAYOUT_RESIZER_SIZE : 0);
+	verticalLayout.setItemLayout(2,
+	                             loggerShown ? MIN_LOGGER_PANE_HEIGHT : 0,
+	                             loggerShown ? -0.6 : 0,
+	                             loggerShown ? loggerPaneHeight : 0);
+	verticalLayout.setItemLayout(3,
+	                             trafficDockedAndShown ? LAYOUT_RESIZER_SIZE : 0,
+	                             trafficDockedAndShown ? LAYOUT_RESIZER_SIZE : 0,
+	                             trafficDockedAndShown ? LAYOUT_RESIZER_SIZE : 0);
+	verticalLayout.setItemLayout(4,
+	                             trafficDockedAndShown ? MIN_CAN_TRAFFIC_PANE_HEIGHT : 0,
+	                             trafficDockedAndShown ? -0.7 : 0,
+	                             trafficDockedAndShown ? canTrafficPaneHeight : 0);
+
+	loggerResizeBar.setVisible(loggerShown);
+	canTrafficResizeBar.setVisible(trafficDockedAndShown);
+	canTrafficDockPane.setVisible(trafficDockedAndShown);
+}
+
+void ServerMainComponent::set_logger_visible(bool shouldBeVisible)
+{
+	logger.setVisible(shouldBeVisible);
+	loggerViewport.setVisible(shouldBeVisible);
+	configure_vertical_layout();
+	resized();
 }
 
 bool ServerMainComponent::start_can_interface()
@@ -800,10 +931,11 @@ void ServerMainComponent::set_can_traffic_monitor_visible(bool shouldBeVisible)
 		canTrafficMonitorWindow->detach_content();
 		canTrafficMonitorWindow.reset();
 	}
-	if (this == canTrafficMonitor.getParentComponent())
+	if (&canTrafficDockPane == canTrafficMonitor.getParentComponent())
 	{
-		removeChildComponent(&canTrafficMonitor);
+		canTrafficDockPane.removeChildComponent(&canTrafficMonitor);
 	}
+	canTrafficDockPane.setVisible(false);
 
 	canTrafficMonitorShown = shouldBeVisible;
 	canTrafficMonitor.set_capture_enabled(canTrafficMonitorShown);
@@ -813,7 +945,7 @@ void ServerMainComponent::set_can_traffic_monitor_visible(bool shouldBeVisible)
 	{
 		if (canTrafficMonitorDocked)
 		{
-			addAndMakeVisible(canTrafficMonitor);
+			canTrafficDockPane.addAndMakeVisible(canTrafficMonitor);
 		}
 		else
 		{
@@ -822,9 +954,11 @@ void ServerMainComponent::set_can_traffic_monitor_visible(bool shouldBeVisible)
 	}
 
 	const bool isDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
+	configure_vertical_layout();
 	if (wasDockedAndVisible != isDockedAndVisible)
 	{
-		const int heightDelta = isDockedAndVisible ? CANTrafficMonitorComponent::DOCKED_HEIGHT : -CANTrafficMonitorComponent::DOCKED_HEIGHT;
+		const int trafficAreaHeight = canTrafficPaneHeight + LAYOUT_RESIZER_SIZE;
+		const int heightDelta = isDockedAndVisible ? trafficAreaHeight : -trafficAreaHeight;
 		setSize(getWidth(), std::max(1, getHeight() + heightDelta));
 	}
 	resized();
@@ -845,10 +979,11 @@ void ServerMainComponent::set_can_traffic_monitor_docked(bool shouldBeDocked)
 		canTrafficMonitorWindow->detach_content();
 		canTrafficMonitorWindow.reset();
 	}
-	if (this == canTrafficMonitor.getParentComponent())
+	if (&canTrafficDockPane == canTrafficMonitor.getParentComponent())
 	{
-		removeChildComponent(&canTrafficMonitor);
+		canTrafficDockPane.removeChildComponent(&canTrafficMonitor);
 	}
+	canTrafficDockPane.setVisible(false);
 
 	canTrafficMonitorDocked = shouldBeDocked;
 	canTrafficMonitor.set_is_docked(canTrafficMonitorDocked);
@@ -856,7 +991,7 @@ void ServerMainComponent::set_can_traffic_monitor_docked(bool shouldBeDocked)
 	{
 		if (canTrafficMonitorDocked)
 		{
-			addAndMakeVisible(canTrafficMonitor);
+			canTrafficDockPane.addAndMakeVisible(canTrafficMonitor);
 		}
 		else
 		{
@@ -865,9 +1000,11 @@ void ServerMainComponent::set_can_traffic_monitor_docked(bool shouldBeDocked)
 	}
 
 	const bool isDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
+	configure_vertical_layout();
 	if (wasDockedAndVisible != isDockedAndVisible)
 	{
-		const int heightDelta = isDockedAndVisible ? CANTrafficMonitorComponent::DOCKED_HEIGHT : -CANTrafficMonitorComponent::DOCKED_HEIGHT;
+		const int trafficAreaHeight = canTrafficPaneHeight + LAYOUT_RESIZER_SIZE;
+		const int heightDelta = isDockedAndVisible ? trafficAreaHeight : -trafficAreaHeight;
 		setSize(getWidth(), std::max(1, getHeight() + heightDelta));
 	}
 	resized();
@@ -1579,7 +1716,6 @@ void ServerMainComponent::LanguageCommandConfigClosed::operator()(int result) co
 		{
 			auto dataMaskSize = mParent.popupMenu->getTextEditorContents("Data Mask Size (height and width)");
 			mParent.dataMaskRenderer.setSize(dataMaskSize.getIntValue(), dataMaskSize.getIntValue());
-			mParent.softKeyMaskRenderer.setTopLeftPosition(100 + dataMaskSize.getIntValue(), 4 + juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight());
 
 			mParent.softKeyMaskDimensions.columnCount = mParent.popupMenu->getTextEditorContents("Number of Physical Soft Key columns").getIntValue();
 			mParent.softKeyMaskDimensions.rowCount = mParent.popupMenu->getTextEditorContents("Number of Physical Soft Key rows").getIntValue();
@@ -1606,22 +1742,14 @@ void ServerMainComponent::LanguageCommandConfigClosed::operator()(int result) co
 
 			mParent.save_settings();
 			mParent.repaint_data_and_soft_key_mask();
+			mParent.resized();
 		}
 		break;
 
 		case 4: // Log level
 		{
 			isobus::CANStackLogger::set_log_level(static_cast<isobus::CANStackLogger::LoggingLevel>(mParent.popupMenu->getComboBoxComponent("Logging Level")->getSelectedItemIndex()));
-			if (mParent.popupMenu->getComboBoxComponent("Logging Window")->getSelectedItemIndex() == 1)
-			{
-				mParent.logger.setVisible(true);
-				mParent.loggerViewport.setVisible(true);
-			}
-			else
-			{
-				mParent.logger.setVisible(false);
-				mParent.loggerViewport.setVisible(false);
-			}
+			mParent.set_logger_visible(mParent.popupMenu->getComboBoxComponent("Logging Window")->getSelectedItemIndex() == 1);
 
 			mParent.saveIopBeforeParse = (mParent.popupMenu->getComboBoxComponent("Save IOP data before parsing")->getSelectedItemIndex() == 1);
 			mParent.save_settings();
@@ -1967,7 +2095,6 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 				isobus::CANStackLogger::warn("Socket CAN interface name not yet configured. Using default of \"can0\"");
 			}
 #endif
-			softKeyMaskRenderer.setTopLeftPosition(100 + dataMaskRenderer.getWidth(), 4 + juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight());
 			JuceManagedWorkingSetCache::set_softkey_mask_dimension_info(softKeyMaskDimensions);
 		}
 		else if (Identifier("CANTraffic") == child.getType())
@@ -1979,6 +2106,31 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 			if (!child.getProperty("Docked").isVoid())
 			{
 				canTrafficMonitorDocked = (0 != static_cast<int>(child.getProperty("Docked")));
+			}
+		}
+		else if (Identifier("Layout") == child.getType())
+		{
+			if (!child.getProperty("WorkingSetPaneWidth").isVoid())
+			{
+				workingSetPaneWidth = juce::jlimit(WorkingSetSelectorComponent::BUTTON_WIDTH,
+				                                       260,
+				                                       static_cast<int>(child.getProperty("WorkingSetPaneWidth")));
+			}
+			if (!child.getProperty("SoftKeyPaneWidth").isVoid())
+			{
+				softKeyPaneWidth = juce::jlimit(80, 500, static_cast<int>(child.getProperty("SoftKeyPaneWidth")));
+			}
+			if (!child.getProperty("LoggerPaneHeight").isVoid())
+			{
+				loggerPaneHeight = juce::jlimit(MIN_LOGGER_PANE_HEIGHT,
+				                                     1200,
+				                                     static_cast<int>(child.getProperty("LoggerPaneHeight")));
+			}
+			if (!child.getProperty("CANTrafficPaneHeight").isVoid())
+			{
+				canTrafficPaneHeight = juce::jlimit(MIN_CAN_TRAFFIC_PANE_HEIGHT,
+				                                         1200,
+				                                         static_cast<int>(child.getProperty("CANTrafficPaneHeight")));
 			}
 		}
 		else if (Identifier("Logging") == child.getType())
@@ -2061,6 +2213,7 @@ void ServerMainComponent::save_settings()
 		ValueTree compatibilitySettings("Compatibility");
 		ValueTree hardwareSettings("Hardware");
 		ValueTree canTrafficSettings("CANTraffic");
+		ValueTree layoutSettings("Layout");
 		ValueTree loggingSettings("Logging");
 		ValueTree controlSettings("Control");
 
@@ -2109,6 +2262,10 @@ void ServerMainComponent::save_settings()
 		}
 		canTrafficSettings.setProperty("Shown", static_cast<int>(canTrafficMonitorShown), nullptr);
 		canTrafficSettings.setProperty("Docked", static_cast<int>(canTrafficMonitorDocked), nullptr);
+		layoutSettings.setProperty("WorkingSetPaneWidth", workingSetPaneWidth, nullptr);
+		layoutSettings.setProperty("SoftKeyPaneWidth", softKeyPaneWidth, nullptr);
+		layoutSettings.setProperty("LoggerPaneHeight", loggerPaneHeight, nullptr);
+		layoutSettings.setProperty("CANTrafficPaneHeight", canTrafficPaneHeight, nullptr);
 		loggingSettings.setProperty("Level", static_cast<int>(isobus::CANStackLogger::get_log_level()), nullptr);
 		loggingSettings.setProperty("Shown", static_cast<int>(logger.isVisible()), nullptr);
 		loggingSettings.setProperty("SaveIopBeforeParse", static_cast<int>(saveIopBeforeParse), nullptr);
@@ -2118,6 +2275,7 @@ void ServerMainComponent::save_settings()
 		settings.appendChild(compatibilitySettings, nullptr);
 		settings.appendChild(hardwareSettings, nullptr);
 		settings.appendChild(canTrafficSettings, nullptr);
+		settings.appendChild(layoutSettings, nullptr);
 		settings.appendChild(loggingSettings, nullptr);
 		settings.appendChild(controlSettings, nullptr);
 		std::unique_ptr<XmlElement> xml(settings.createXml());
@@ -2228,10 +2386,11 @@ void ServerMainComponent::screen_capture(std::uint8_t item, std::uint8_t path, s
 
 	Image image(Image::PixelFormat::ARGB, dataMaskRenderer.getWidth() + softKeyMaskRenderer.getWidth(), dataMaskRenderer.getHeight(), true);
 	Graphics g(image);
-	paint(g);
-	juce::AffineTransform t;
-	g.addTransform(t.translated(-dataMaskRenderer.getX(), -dataMaskRenderer.getY()));
-	paintEntireComponent(g, false);
+	dataMaskRenderer.paintEntireComponent(g, false);
+	g.saveState();
+	g.addTransform(juce::AffineTransform::translation(static_cast<float>(dataMaskRenderer.getWidth()), 0.0f));
+	softKeyMaskRenderer.paintEntireComponent(g, false);
+	g.restoreState();
 
 	PNGImageFormat pngFormat;
 	std::unique_ptr<FileOutputStream> stream(saveFile.createOutputStream());

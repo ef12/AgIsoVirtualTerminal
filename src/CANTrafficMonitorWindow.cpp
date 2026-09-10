@@ -18,6 +18,7 @@ CANTrafficMonitorWindow::CANTrafficMonitorWindow(CANTrafficMonitorComponent &con
 {
 	setUsingNativeTitleBar(true);
 	setResizable(true, true);
+	setResizeLimits(520, 240, 4096, 4096);
 	setContentNonOwned(&content, false);
 	centreWithSize(900, 420);
 	setVisible(true);
