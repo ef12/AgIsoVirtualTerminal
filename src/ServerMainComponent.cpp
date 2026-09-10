@@ -16,6 +16,7 @@
 #include "SoftKeyMaskRenderAreaComponent.hpp"
 
 #ifdef JUCE_WINDOWS
+#include "isobus/hardware_integration/can_api2_windows_plugin.hpp"
 #include "isobus/hardware_integration/toucan_vscp_canal.hpp"
 #elif JUCE_LINUX
 #include "isobus/hardware_integration/socket_can_interface.hpp"
@@ -27,6 +28,13 @@
 #include <iomanip>
 #include <iterator>
 #include <sstream>
+
+#ifdef JUCE_WINDOWS
+namespace
+{
+	constexpr std::size_t CAN_API2_DRIVER_INDEX = 6;
+}
+#endif
 
 ServerMainComponent::ServerMainComponent(
   std::shared_ptr<isobus::InternalControlFunction> serverControlFunction,
@@ -1735,6 +1743,16 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 				std::static_pointer_cast<isobus::TouCANPlugin>(parentCANDrivers.at(2))->reconfigure(0, static_cast<std::uint32_t>(static_cast<int>(child.getProperty("TouCANSerial"))));
 			}
 
+			if (!child.getProperty("CANAPI2NetName").isVoid())
+			{
+				auto canAPI2Driver = std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(CAN_API2_DRIVER_INDEX));
+				const auto configuredNetName = child.getProperty("CANAPI2NetName").toString().toStdString();
+				if (canAPI2Driver->configure(configuredNetName))
+				{
+					isobus::CANStackLogger::info("Using PCAN-Virtual network name of: " + configuredNetName);
+				}
+			}
+
 			if (!child.getProperty("CANDriver").isVoid())
 			{
 				auto index = static_cast<std::uint32_t>(static_cast<int>(child.getProperty("CANDriver")));
@@ -1878,6 +1896,7 @@ void ServerMainComponent::save_settings()
 
 #ifdef JUCE_WINDOWS
 		hardwareSettings.setProperty("TouCANSerial", static_cast<int>(std::static_pointer_cast<isobus::TouCANPlugin>(parentCANDrivers.at(2))->get_serial_number()), nullptr);
+		hardwareSettings.setProperty("CANAPI2NetName", String(std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(CAN_API2_DRIVER_INDEX))->get_net_name()), nullptr);
 #elif JUCE_LINUX
 		hardwareSettings.setProperty("SocketCANInterface", String(std::static_pointer_cast<isobus::SocketCANInterface>(parentCANDrivers.at(0))->get_device_name()), nullptr);
 #endif
