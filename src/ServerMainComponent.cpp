@@ -6,6 +6,7 @@
 #include "ServerMainComponent.hpp"
 
 #include "AlarmMaskAudio.h"
+#include "CANTrafficMonitorWindow.hpp"
 #include "JuceManagedWorkingSetCache.hpp"
 #include "Main.hpp"
 #include "ShortcutsWindow.hpp"
@@ -47,6 +48,15 @@ ServerMainComponent::ServerMainComponent(
 {
 	isobus::CANStackLogger::set_can_stack_logger_sink(&logger);
 	isobus::CANStackLogger::set_log_level(isobus::CANStackLogger::LoggingLevel::Info);
+	canTrafficMonitor.set_dock_toggle_callback([this]() {
+		Component::SafePointer<ServerMainComponent> safeThis(this);
+		MessageManager::callAsync([safeThis]() {
+			if (nullptr != safeThis)
+			{
+				safeThis->set_can_traffic_monitor_docked(!safeThis->canTrafficMonitorDocked);
+			}
+		});
+	});
 
 	VirtualTerminalServer::initialize();
 
@@ -54,6 +64,7 @@ ServerMainComponent::ServerMainComponent(
 	loggerViewport.setVisible(true);
 
 	check_load_settings(settings);
+	canTrafficMonitor.set_capture_enabled(canTrafficMonitorShown);
 
 	if (languageCommandInterface.get_country_code().empty())
 	{
@@ -88,6 +99,11 @@ ServerMainComponent::ServerMainComponent(
 	addAndMakeVisible(softKeyMaskRenderer);
 	addChildComponent(loggerViewport);
 	addChildComponent(vtNumberComponent);
+	canTrafficMonitor.set_is_docked(canTrafficMonitorDocked);
+	if (canTrafficMonitorShown && canTrafficMonitorDocked)
+	{
+		addAndMakeVisible(canTrafficMonitor);
+	}
 	vtNumber = vtNumberArg;
 	menuBar.setModel(this);
 	addAndMakeVisible(menuBar);
@@ -95,7 +111,17 @@ ServerMainComponent::ServerMainComponent(
 	// Make sure you set the size of the component after
 	// you add any child components.
 	setSize(WorkingSetSelectorComponent::WIDTH + get_data_mask_area_size_x_pixels() + softKeyMaskDimensions.total_width(),
-	        minimum_height() + LoggerComponent::HEIGHT);
+	        minimum_height() + LoggerComponent::HEIGHT + ((canTrafficMonitorShown && canTrafficMonitorDocked) ? CANTrafficMonitorComponent::DOCKED_HEIGHT : 0));
+	if (canTrafficMonitorShown && !canTrafficMonitorDocked)
+	{
+		Component::SafePointer<ServerMainComponent> safeThis(this);
+		MessageManager::callAsync([safeThis]() {
+			if ((nullptr != safeThis) && safeThis->canTrafficMonitorShown && !safeThis->canTrafficMonitorDocked)
+			{
+				safeThis->show_detached_can_traffic_monitor();
+			}
+		});
+	}
 
 	workingSetSelector.setTopLeftPosition(0, juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight());
 
@@ -113,6 +139,12 @@ ServerMainComponent::ServerMainComponent(
 
 ServerMainComponent::~ServerMainComponent()
 {
+	canTrafficMonitor.set_dock_toggle_callback({});
+	if (canTrafficMonitorWindow)
+	{
+		canTrafficMonitorWindow->detach_content();
+		canTrafficMonitorWindow.reset();
+	}
 	setApplicationCommandManagerToWatch(nullptr);
 }
 
@@ -705,7 +737,13 @@ void ServerMainComponent::resized()
 	                              lMenuBarHeight,
 	                              2 * SoftKeyMaskDimensions::PADDING + get_physical_soft_key_columns() * (SoftKeyMaskDimensions::PADDING + get_soft_key_descriptor_y_pixel_height()),
 	                              get_data_mask_area_size_y_pixels());
-	loggerViewport.setTopLeftPosition(0, minimum_height());
+	const int dockedMonitorHeight = (canTrafficMonitorShown && canTrafficMonitorDocked) ? CANTrafficMonitorComponent::DOCKED_HEIGHT : 0;
+	const int dockedMonitorTop = getHeight() - dockedMonitorHeight;
+	loggerViewport.setBounds(0, minimum_height(), getWidth(), std::max(0, dockedMonitorTop - minimum_height()));
+	if (dockedMonitorHeight > 0)
+	{
+		canTrafficMonitor.setBounds(0, dockedMonitorTop, getWidth(), dockedMonitorHeight);
+	}
 	menuBar.setBounds(lBounds.removeFromTop(lMenuBarHeight));
 	logger.setSize(loggerViewport.getWidth(), logger.getHeight());
 
@@ -713,6 +751,110 @@ void ServerMainComponent::resized()
 	{
 		logger.setSize(loggerViewport.getWidth(), loggerViewport.getHeight());
 	}
+}
+
+void ServerMainComponent::set_can_traffic_monitor_visible(bool shouldBeVisible)
+{
+	if (canTrafficMonitorShown == shouldBeVisible)
+	{
+		if (shouldBeVisible && canTrafficMonitorWindow)
+		{
+			canTrafficMonitorWindow->toFront(true);
+		}
+		return;
+	}
+
+	const bool wasDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
+	if (canTrafficMonitorWindow)
+	{
+		canTrafficMonitorWindow->detach_content();
+		canTrafficMonitorWindow.reset();
+	}
+	if (this == canTrafficMonitor.getParentComponent())
+	{
+		removeChildComponent(&canTrafficMonitor);
+	}
+
+	canTrafficMonitorShown = shouldBeVisible;
+	canTrafficMonitor.set_capture_enabled(canTrafficMonitorShown);
+	canTrafficMonitor.setVisible(shouldBeVisible);
+	canTrafficMonitor.set_is_docked(canTrafficMonitorDocked);
+	if (shouldBeVisible)
+	{
+		if (canTrafficMonitorDocked)
+		{
+			addAndMakeVisible(canTrafficMonitor);
+		}
+		else
+		{
+			show_detached_can_traffic_monitor();
+		}
+	}
+
+	const bool isDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
+	if (wasDockedAndVisible != isDockedAndVisible)
+	{
+		const int heightDelta = isDockedAndVisible ? CANTrafficMonitorComponent::DOCKED_HEIGHT : -CANTrafficMonitorComponent::DOCKED_HEIGHT;
+		setSize(getWidth(), std::max(1, getHeight() + heightDelta));
+	}
+	resized();
+	mCommandManager.commandStatusChanged();
+	save_settings();
+}
+
+void ServerMainComponent::set_can_traffic_monitor_docked(bool shouldBeDocked)
+{
+	if (canTrafficMonitorDocked == shouldBeDocked)
+	{
+		return;
+	}
+
+	const bool wasDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
+	if (canTrafficMonitorWindow)
+	{
+		canTrafficMonitorWindow->detach_content();
+		canTrafficMonitorWindow.reset();
+	}
+	if (this == canTrafficMonitor.getParentComponent())
+	{
+		removeChildComponent(&canTrafficMonitor);
+	}
+
+	canTrafficMonitorDocked = shouldBeDocked;
+	canTrafficMonitor.set_is_docked(canTrafficMonitorDocked);
+	if (canTrafficMonitorShown)
+	{
+		if (canTrafficMonitorDocked)
+		{
+			addAndMakeVisible(canTrafficMonitor);
+		}
+		else
+		{
+			show_detached_can_traffic_monitor();
+		}
+	}
+
+	const bool isDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
+	if (wasDockedAndVisible != isDockedAndVisible)
+	{
+		const int heightDelta = isDockedAndVisible ? CANTrafficMonitorComponent::DOCKED_HEIGHT : -CANTrafficMonitorComponent::DOCKED_HEIGHT;
+		setSize(getWidth(), std::max(1, getHeight() + heightDelta));
+	}
+	resized();
+	save_settings();
+}
+
+void ServerMainComponent::show_detached_can_traffic_monitor()
+{
+	canTrafficMonitor.set_is_docked(false);
+	canTrafficMonitor.setVisible(true);
+	Component::SafePointer<ServerMainComponent> safeThis(this);
+	canTrafficMonitorWindow = std::make_unique<CANTrafficMonitorWindow>(canTrafficMonitor, [safeThis]() {
+		if (nullptr != safeThis)
+		{
+			safeThis->set_can_traffic_monitor_visible(false);
+		}
+	});
 }
 
 ApplicationCommandTarget *ServerMainComponent::getNextCommandTarget()
@@ -733,6 +875,7 @@ void ServerMainComponent::getAllCommands(juce::Array<juce::CommandID> &allComman
 	allCommands.add(static_cast<int>(CommandIDs::ClearISOData));
 	allCommands.add(static_cast<int>(CommandIDs::StartStop));
 	allCommands.add(static_cast<int>(CommandIDs::AutoStart));
+	allCommands.add(static_cast<int>(CommandIDs::ShowCANTrafficMonitor));
 #ifdef JUCE_WINDOWS
 	allCommands.add(static_cast<int>(CommandIDs::ConfigureCANHardware));
 #elif JUCE_LINUX
@@ -801,6 +944,12 @@ void ServerMainComponent::getCommandInfo(juce::CommandID commandID, ApplicationC
 		case CommandIDs::ConfigureCANHardware:
 		{
 			result.setInfo("Configure CAN Hardware", "Selects which CAN hardware to connect to", "Configure", hasStartBeenCalled ? ApplicationCommandInfo::CommandFlags::isDisabled : 0);
+		}
+		break;
+
+		case CommandIDs::ShowCANTrafficMonitor:
+		{
+			result.setInfo("CAN Traffic Monitor", "Shows live transmitted and received CAN frames", "View", canTrafficMonitorShown ? ApplicationCommandInfo::CommandFlags::isTicked : 0);
 		}
 		break;
 
@@ -1063,6 +1212,13 @@ bool ServerMainComponent::perform(const InvocationInfo &info)
 		}
 		break;
 
+		case static_cast<int>(CommandIDs::ShowCANTrafficMonitor):
+		{
+			set_can_traffic_monitor_visible(!canTrafficMonitorShown);
+			retVal = true;
+		}
+		break;
+
 		case static_cast<int>(CommandIDs::StartStop):
 		{
 			if (hasStartBeenCalled)
@@ -1131,7 +1287,7 @@ bool ServerMainComponent::perform(const InvocationInfo &info)
 
 StringArray ServerMainComponent::getMenuBarNames()
 {
-	return juce::StringArray("Control", "Configure", "Troubleshooting", "About");
+	return juce::StringArray("Control", "View", "Configure", "Troubleshooting", "About");
 }
 
 PopupMenu ServerMainComponent::getMenuForIndex(int index, const juce::String &)
@@ -1149,6 +1305,12 @@ PopupMenu ServerMainComponent::getMenuForIndex(int index, const juce::String &)
 
 		case 1:
 		{
+			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::ShowCANTrafficMonitor));
+		}
+		break;
+
+		case 2:
+		{
 			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::ConfigureLanguageCommand));
 			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::ConfigureReportedVersion));
 			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::ConfigureReportedHardware));
@@ -1163,7 +1325,7 @@ PopupMenu ServerMainComponent::getMenuForIndex(int index, const juce::String &)
 		}
 		break;
 
-		case 2:
+		case 3:
 		{
 			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::GenerateLogPackage));
 			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::GenerateLogPackageFromCurrentSession));
@@ -1171,7 +1333,7 @@ PopupMenu ServerMainComponent::getMenuForIndex(int index, const juce::String &)
 		}
 		break;
 
-		case 3:
+		case 4:
 		{
 			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::About));
 		}
@@ -1778,6 +1940,17 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 			softKeyMaskRenderer.setTopLeftPosition(100 + dataMaskRenderer.getWidth(), 4 + juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight());
 			JuceManagedWorkingSetCache::set_softkey_mask_dimension_info(softKeyMaskDimensions);
 		}
+		else if (Identifier("CANTraffic") == child.getType())
+		{
+			if (!child.getProperty("Shown").isVoid())
+			{
+				canTrafficMonitorShown = (0 != static_cast<int>(child.getProperty("Shown")));
+			}
+			if (!child.getProperty("Docked").isVoid())
+			{
+				canTrafficMonitorDocked = (0 != static_cast<int>(child.getProperty("Docked")));
+			}
+		}
 		else if (Identifier("Logging") == child.getType())
 		{
 			if ((!child.getProperty("Level").isVoid()) && (static_cast<int>(child.getProperty("Level")) <= static_cast<int>(isobus::CANStackLogger::LoggingLevel::Critical)))
@@ -1859,6 +2032,7 @@ void ServerMainComponent::save_settings()
 		ValueTree languageCommandSettings("LanguageCommand");
 		ValueTree compatibilitySettings("Compatibility");
 		ValueTree hardwareSettings("Hardware");
+		ValueTree canTrafficSettings("CANTraffic");
 		ValueTree loggingSettings("Logging");
 		ValueTree controlSettings("Control");
 
@@ -1905,6 +2079,8 @@ void ServerMainComponent::save_settings()
 		{
 			hardwareSettings.setProperty("CANDriver", static_cast<int>(hardwareDriverIndex), nullptr);
 		}
+		canTrafficSettings.setProperty("Shown", static_cast<int>(canTrafficMonitorShown), nullptr);
+		canTrafficSettings.setProperty("Docked", static_cast<int>(canTrafficMonitorDocked), nullptr);
 		loggingSettings.setProperty("Level", static_cast<int>(isobus::CANStackLogger::get_log_level()), nullptr);
 		loggingSettings.setProperty("Shown", static_cast<int>(logger.isVisible()), nullptr);
 		loggingSettings.setProperty("SaveIopBeforeParse", static_cast<int>(saveIopBeforeParse), nullptr);
@@ -1913,6 +2089,7 @@ void ServerMainComponent::save_settings()
 		settings.appendChild(languageCommandSettings, nullptr);
 		settings.appendChild(compatibilitySettings, nullptr);
 		settings.appendChild(hardwareSettings, nullptr);
+		settings.appendChild(canTrafficSettings, nullptr);
 		settings.appendChild(loggingSettings, nullptr);
 		settings.appendChild(controlSettings, nullptr);
 		std::unique_ptr<XmlElement> xml(settings.createXml());

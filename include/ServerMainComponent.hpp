@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CANTrafficMonitorComponent.hpp"
 #include "ConfigureHardwareWindow.hpp"
 #include "DataMaskRenderAreaComponent.hpp"
 #include "LoggerComponent.hpp"
@@ -12,6 +13,8 @@
 #include "isobus/isobus/isobus_virtual_terminal_server.hpp"
 
 #include <filesystem>
+
+class CANTrafficMonitorWindow;
 
 class ServerMainComponent : public juce::Component
   , public juce::KeyListener
@@ -151,6 +154,7 @@ private:
 		GenerateLogPackageFromCurrentSession,
 		ClearISOData,
 		ConfigureCANHardware,
+		ShowCANTrafficMonitor,
 		StartStop,
 		AutoStart
 	};
@@ -189,6 +193,9 @@ private:
 	void on_change_active_mask_callback(std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> affectedWorkingSet, std::uint16_t workingSet, std::uint16_t newMask);
 	void repaint_data_and_soft_key_mask();
 	void check_load_settings(std::shared_ptr<ValueTree> settings);
+	void set_can_traffic_monitor_visible(bool shouldBeVisible);
+	void set_can_traffic_monitor_docked(bool shouldBeDocked);
+	void show_detached_can_traffic_monitor();
 	void remove_working_set(std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> workingSetToRemove);
 	void clear_iso_data();
 
@@ -203,6 +210,7 @@ private:
 	MenuBarComponent menuBar;
 	LoggerComponent logger;
 	Viewport loggerViewport;
+	CANTrafficMonitorComponent canTrafficMonitor;
 	VT_NumberComponent vtNumberComponent;
 	SoundPlayer mSoundPlayer;
 	AudioDeviceManager mAudioDeviceManager;
@@ -210,6 +218,7 @@ private:
 	std::unique_ptr<isobus::DiagnosticProtocol> diagnosticProtocol;
 	std::unique_ptr<AlertWindow> popupMenu;
 	std::unique_ptr<ConfigureHardwareWindow> configureHardwareWindow;
+	std::unique_ptr<CANTrafficMonitorWindow> canTrafficMonitorWindow;
 	std::shared_ptr<isobus::ControlFunction> alarmAckKeyWs;
 	std::vector<std::shared_ptr<isobus::CANHardwarePlugin>> &parentCANDrivers;
 	std::vector<HeldButtonData> heldButtons;
@@ -224,6 +233,8 @@ private:
 	bool hasStartBeenCalled = false;
 	bool alarmAckKeyPressed = false;
 	bool saveIopBeforeParse = false;
+	bool canTrafficMonitorShown = false;
+	bool canTrafficMonitorDocked = true;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ServerMainComponent)
 };

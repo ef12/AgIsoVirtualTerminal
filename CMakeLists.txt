@@ -97,6 +97,8 @@ target_sources(
           "src/AlarmMaskAudio.cpp"
           "src/AppImages.cpp"
           "src/ASCIILogFile.cpp"
+          "src/CANTrafficMonitorComponent.cpp"
+          "src/CANTrafficMonitorWindow.cpp"
           "src/ConfigureHardwareWindow.cpp"
           "src/ConfigureHardwareComponent.cpp"
           "src/StringEncodingConversions.cpp"

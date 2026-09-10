@@ -122,6 +122,8 @@ Only 64 bit builds are supported on Windows.
 
 The Windows build can use PEAK PCAN-Virtual without a physical CAN adapter. Install PEAK's CAN-API 2 virtual driver, then select **Configure → Configure CAN Hardware → PEAK PCAN Virtual** in the application. The terminal creates the named software-only network automatically at 250 kbit/s; configure the implement simulator with the same network name. The default network is `PCANLight_USB`.
 
+Open **View → CAN Traffic Monitor** to inspect live transmitted and received CAN frames. The monitor provides pause, clear, and auto-scroll controls and keeps a bounded history to avoid unbounded memory use. Use **Undock** to move it into a separate resizable window, or **Dock** to attach it below the main terminal display. Its visibility and docking preference are restored on the next launch.
+
 ### A note about CMake Versions
 
 CMake 3.22 or higher is required! If the version you have is too old, such as if you are on Ubuntu 18.04 and using the one provided with `apt-get`, you can instead download the latest version of CMake [here](https://cmake.org/download/) and use that to compile this software.
