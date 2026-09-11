@@ -42,19 +42,19 @@ ServerMainComponent::ServerMainComponent(
   std::shared_ptr<isobus::InternalControlFunction> serverControlFunction,
   std::vector<std::shared_ptr<isobus::CANHardwarePlugin>> &canDrivers,
   std::shared_ptr<ValueTree> settings,
-  const std::string &canLogPath_,
+  ASCIILogFile &trafficLogger,
   std::uint8_t vtNumberArg,
   std::string screenCaptureDir) :
   VirtualTerminalServer(serverControlFunction),
   screenCaptureDirArgument(screenCaptureDir),
-  canLogPath(canLogPath_),
   workingSetSelector(*this),
   dataMaskRenderer(*this),
   softKeyMaskRenderer(*this),
-  workingSetResizeBar(&horizontalLayout, 1, true),
-  softKeyResizeBar(&horizontalLayout, 3, true),
   loggerResizeBar(&verticalLayout, 1, false),
   canTrafficResizeBar(&verticalLayout, 3, false),
+  loggerSideResizeBar(&verticalLayout, 1, true),
+  canTrafficSideResizeBar(&verticalLayout, 3, true),
+  canTrafficMonitor(trafficLogger),
   parentCANDrivers(canDrivers)
 {
 	isobus::CANStackLogger::set_can_stack_logger_sink(&logger);
@@ -71,8 +71,8 @@ ServerMainComponent::ServerMainComponent(
 
 	VirtualTerminalServer::initialize();
 
-	logger.setVisible(true);
-	loggerViewport.setVisible(true);
+	logger.setVisible(false);
+	loggerViewport.setVisible(false);
 
 	check_load_settings(settings);
 	canTrafficMonitor.set_capture_enabled(canTrafficMonitorShown);
@@ -114,24 +114,16 @@ ServerMainComponent::ServerMainComponent(
 	{
 		softKeyMaskRenderer.setSize(softKeyMaskDimensions.total_width(), dataMaskRenderer.getHeight());
 	}
-	if (0 == softKeyPaneWidth)
-	{
-		softKeyPaneWidth = softKeyMaskRenderer.getWidth();
-	}
-
-	terminalPane.setInterceptsMouseClicks(false, false);
-	addAndMakeVisible(terminalPane);
-	workingSetViewport.setViewedComponent(&workingSetSelector, false);
-	dataMaskViewport.setViewedComponent(&dataMaskRenderer, false);
-	softKeyMaskViewport.setViewedComponent(&softKeyMaskRenderer, false);
-	addAndMakeVisible(workingSetViewport);
-	addAndMakeVisible(workingSetResizeBar);
-	addAndMakeVisible(dataMaskViewport);
-	addAndMakeVisible(softKeyResizeBar);
-	addAndMakeVisible(softKeyMaskViewport);
+	addAndMakeVisible(physicalTerminalPanel);
+	auto &terminalScreen = physicalTerminalPanel.get_screen_component();
+	terminalScreen.addAndMakeVisible(workingSetSelector);
+	terminalScreen.addAndMakeVisible(dataMaskRenderer);
+	terminalScreen.addAndMakeVisible(softKeyMaskRenderer);
 	addAndMakeVisible(loggerResizeBar);
+	addChildComponent(loggerSideResizeBar);
 	addChildComponent(loggerViewport);
 	addChildComponent(canTrafficResizeBar);
+	addChildComponent(canTrafficSideResizeBar);
 	addChildComponent(canTrafficDockPane);
 	dataMaskRenderer.addChildComponent(vtNumberComponent);
 	canTrafficMonitor.set_is_docked(canTrafficMonitorDocked);
@@ -140,23 +132,33 @@ ServerMainComponent::ServerMainComponent(
 		addAndMakeVisible(canTrafficDockPane);
 		canTrafficDockPane.addAndMakeVisible(canTrafficMonitor);
 	}
-	workingSetResizeBar.addMouseListener(this, false);
-	softKeyResizeBar.addMouseListener(this, false);
 	loggerResizeBar.addMouseListener(this, false);
 	canTrafficResizeBar.addMouseListener(this, false);
-	configure_horizontal_layout();
+	loggerSideResizeBar.addMouseListener(this, false);
+	canTrafficSideResizeBar.addMouseListener(this, false);
 	configure_vertical_layout();
+	layout_terminal_screen();
 	vtNumber = vtNumberArg;
 	menuBar.setModel(this);
 	addAndMakeVisible(menuBar);
+	applicationHeader.set_start_stop_callback([this]() {
+		mCommandManager.invokeDirectly(static_cast<int>(CommandIDs::StartStop), true);
+	});
+	applicationHeader.set_hardware_callback([this]() {
+		mCommandManager.invokeDirectly(static_cast<int>(CommandIDs::ConfigureCANHardware), true);
+	});
+	applicationHeader.set_traffic_callback([this]() {
+		mCommandManager.invokeDirectly(static_cast<int>(CommandIDs::ShowCANTrafficMonitor), true);
+	});
+	addAndMakeVisible(applicationHeader);
 
 	// Make sure you set the size of the component after
 	// you add any child components.
 	const int lMenuBarHeight = juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight();
 	const int initialLoggerHeight = loggerViewport.isVisible() ? loggerPaneHeight + LAYOUT_RESIZER_SIZE : 0;
 	const int initialTrafficHeight = (canTrafficMonitorShown && canTrafficMonitorDocked) ? canTrafficPaneHeight + LAYOUT_RESIZER_SIZE : 0;
-	setSize(workingSetPaneWidth + get_data_mask_area_size_x_pixels() + softKeyPaneWidth + (2 * LAYOUT_RESIZER_SIZE),
-	        lMenuBarHeight + minimum_height() + initialLoggerHeight + initialTrafficHeight);
+	setSize((PhysicalTerminalPanel::CONTENT_PADDING * 2) + (PhysicalTerminalPanel::SIDE_BEZEL * 2) + WorkingSetSelectorComponent::WIDTH + WORKING_SET_TO_DATA_GAP + get_data_mask_area_size_x_pixels() + DATA_TO_SOFT_KEY_GAP + softKeyMaskRenderer.getWidth(),
+	        lMenuBarHeight + ApplicationHeaderComponent::HEIGHT + (PhysicalTerminalPanel::CONTENT_PADDING * 2) + PhysicalTerminalPanel::TOP_BEZEL + minimum_height() + PhysicalTerminalPanel::BOTTOM_BEZEL + initialLoggerHeight + initialTrafficHeight);
 	if (canTrafficMonitorShown && !canTrafficMonitorDocked)
 	{
 		Component::SafePointer<ServerMainComponent> safeThis(this);
@@ -173,6 +175,7 @@ ServerMainComponent::ServerMainComponent(
 
 	setApplicationCommandManagerToWatch(&mCommandManager);
 	mCommandManager.registerAllCommandsForTarget(this);
+	refresh_application_header();
 	startTimer(50);
 
 	setWantsKeyboardFocus(true);
@@ -185,6 +188,7 @@ ServerMainComponent::~ServerMainComponent()
 	{
 		isobus::CANHardwareInterface::stop();
 	}
+	isobus::CANStackLogger::set_can_stack_logger_sink(nullptr);
 	isobus::CANHardwareInterface::get_periodic_update_event_dispatcher().remove_listener(periodicUpdateListener);
 	canTrafficMonitor.set_dock_toggle_callback({});
 	if (canTrafficMonitorWindow)
@@ -608,6 +612,8 @@ std::uint8_t ServerMainComponent::get_user_layout_softkeymask_bg_color() const
 
 void ServerMainComponent::timerCallback()
 {
+	refresh_application_header();
+
 	if ((isobus::SystemTiming::time_expired_ms(statusMessageTimestamp_ms, 1000)) &&
 	    (send_status_message()))
 	{
@@ -759,11 +765,7 @@ void ServerMainComponent::timerCallback()
 
 void ServerMainComponent::paint(juce::Graphics &g)
 {
-	// (Our component is opaque, so we must completely fill the background with a solid colour)
 	g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
-
-	// You can add your drawing code here!
-	//workingSetSelector->paint(g);
 }
 
 void ServerMainComponent::resized()
@@ -771,53 +773,57 @@ void ServerMainComponent::resized()
 	auto bounds = getLocalBounds();
 	const int menuBarHeight = juce::LookAndFeel::getDefaultLookAndFeel().getDefaultMenuBarHeight();
 	menuBar.setBounds(bounds.removeFromTop(menuBarHeight));
+	applicationHeader.setBounds(bounds.removeFromTop(ApplicationHeaderComponent::HEIGHT));
 
-	Component *verticalComponents[] = {
-		&terminalPane,
+	Component *stackedComponents[] = {
+		&physicalTerminalPanel,
 		&loggerResizeBar,
 		&loggerViewport,
 		&canTrafficResizeBar,
 		&canTrafficDockPane
 	};
-	verticalLayout.layOutComponents(verticalComponents,
-	                                static_cast<int>(std::size(verticalComponents)),
+	Component *sideBySideComponents[] = {
+		&physicalTerminalPanel,
+		&loggerSideResizeBar,
+		&loggerViewport,
+		&canTrafficSideResizeBar,
+		&canTrafficDockPane
+	};
+	const bool stacked = PanelLayout::Stacked == panelLayout;
+	Component **components = stacked ? stackedComponents : sideBySideComponents;
+	verticalLayout.layOutComponents(components,
+	                                static_cast<int>(std::size(stackedComponents)),
 	                                bounds.getX(),
 	                                bounds.getY(),
 	                                bounds.getWidth(),
 	                                bounds.getHeight(),
-	                                true,
+	                                stacked,
 	                                true);
 
-	Component *horizontalComponents[] = {
-		&workingSetViewport,
-		&workingSetResizeBar,
-		&dataMaskViewport,
-		&softKeyResizeBar,
-		&softKeyMaskViewport
-	};
-	const auto terminalBounds = terminalPane.getBounds();
-	horizontalLayout.layOutComponents(horizontalComponents,
-	                                  static_cast<int>(std::size(horizontalComponents)),
-	                                  terminalBounds.getX(),
-	                                  terminalBounds.getY(),
-	                                  terminalBounds.getWidth(),
-	                                  terminalBounds.getHeight(),
-	                                  false,
-	                                  true);
-
-	workingSetPaneWidth = horizontalLayout.getItemCurrentAbsoluteSize(0);
-	softKeyPaneWidth = horizontalLayout.getItemCurrentAbsoluteSize(4);
 	if (loggerViewport.isVisible())
 	{
-		loggerPaneHeight = verticalLayout.getItemCurrentAbsoluteSize(2);
+		if (stacked)
+		{
+			loggerPaneHeight = verticalLayout.getItemCurrentAbsoluteSize(2);
+		}
+		else
+		{
+			loggerPaneWidth = verticalLayout.getItemCurrentAbsoluteSize(2);
+		}
 	}
 	if (canTrafficMonitorShown && canTrafficMonitorDocked)
 	{
-		canTrafficPaneHeight = verticalLayout.getItemCurrentAbsoluteSize(4);
+		if (stacked)
+		{
+			canTrafficPaneHeight = verticalLayout.getItemCurrentAbsoluteSize(4);
+		}
+		else
+		{
+			canTrafficPaneWidth = verticalLayout.getItemCurrentAbsoluteSize(4);
+		}
 	}
 
-	workingSetSelector.setSize(WorkingSetSelectorComponent::WIDTH,
-	                           std::max(minimum_height(), workingSetViewport.getHeight()));
+	layout_terminal_screen();
 	vtNumberComponent.setBounds(dataMaskRenderer.getWidth() / 4,
 	                            dataMaskRenderer.getHeight() / 10,
 	                            dataMaskRenderer.getWidth() / 2,
@@ -834,52 +840,74 @@ void ServerMainComponent::resized()
 	}
 }
 
+void ServerMainComponent::refresh_application_header()
+{
+	const auto selectedDriver = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0);
+	const juce::String driverName = (nullptr != selectedDriver) ? selectedDriver->get_name() : "No CAN interface selected";
+	applicationHeader.set_status(hasStartBeenCalled,
+	                             driverName,
+	                             managedWorkingSetList.size(),
+	                             canTrafficMonitorShown);
+	physicalTerminalPanel.set_powered(hasStartBeenCalled);
+}
+
 void ServerMainComponent::mouseUp(const juce::MouseEvent &event)
 {
-	if ((event.eventComponent == &workingSetResizeBar) ||
-	    (event.eventComponent == &softKeyResizeBar) ||
-	    (event.eventComponent == &loggerResizeBar) ||
-	    (event.eventComponent == &canTrafficResizeBar))
+	if ((event.eventComponent == &loggerResizeBar) ||
+	    (event.eventComponent == &canTrafficResizeBar) ||
+	    (event.eventComponent == &loggerSideResizeBar) ||
+	    (event.eventComponent == &canTrafficSideResizeBar))
 	{
 		save_settings();
 	}
-}
-
-void ServerMainComponent::configure_horizontal_layout()
-{
-	horizontalLayout.setItemLayout(0, WorkingSetSelectorComponent::BUTTON_WIDTH, 260, workingSetPaneWidth);
-	horizontalLayout.setItemLayout(1, LAYOUT_RESIZER_SIZE, LAYOUT_RESIZER_SIZE, LAYOUT_RESIZER_SIZE);
-	horizontalLayout.setItemLayout(2, 160, -1.0, -1.0);
-	horizontalLayout.setItemLayout(3, LAYOUT_RESIZER_SIZE, LAYOUT_RESIZER_SIZE, LAYOUT_RESIZER_SIZE);
-	horizontalLayout.setItemLayout(4, 80, 500, softKeyPaneWidth);
 }
 
 void ServerMainComponent::configure_vertical_layout()
 {
 	const bool loggerShown = loggerViewport.isVisible();
 	const bool trafficDockedAndShown = canTrafficMonitorShown && canTrafficMonitorDocked;
+	const bool stacked = PanelLayout::Stacked == panelLayout;
 
-	verticalLayout.setItemLayout(0, MIN_TERMINAL_PANE_HEIGHT, -1.0, -1.0);
+	verticalLayout.setItemLayout(0, stacked ? MIN_TERMINAL_PANE_HEIGHT : 320, -1.0, -1.0);
 	verticalLayout.setItemLayout(1,
 	                             loggerShown ? LAYOUT_RESIZER_SIZE : 0,
 	                             loggerShown ? LAYOUT_RESIZER_SIZE : 0,
 	                             loggerShown ? LAYOUT_RESIZER_SIZE : 0);
 	verticalLayout.setItemLayout(2,
-	                             loggerShown ? MIN_LOGGER_PANE_HEIGHT : 0,
+	                             loggerShown ? (stacked ? MIN_LOGGER_PANE_HEIGHT : 240) : 0,
 	                             loggerShown ? -0.6 : 0,
-	                             loggerShown ? loggerPaneHeight : 0);
+	                             loggerShown ? (stacked ? loggerPaneHeight : loggerPaneWidth) : 0);
 	verticalLayout.setItemLayout(3,
 	                             trafficDockedAndShown ? LAYOUT_RESIZER_SIZE : 0,
 	                             trafficDockedAndShown ? LAYOUT_RESIZER_SIZE : 0,
 	                             trafficDockedAndShown ? LAYOUT_RESIZER_SIZE : 0);
 	verticalLayout.setItemLayout(4,
-	                             trafficDockedAndShown ? MIN_CAN_TRAFFIC_PANE_HEIGHT : 0,
+	                             trafficDockedAndShown ? (stacked ? MIN_CAN_TRAFFIC_PANE_HEIGHT : 340) : 0,
 	                             trafficDockedAndShown ? -0.7 : 0,
-	                             trafficDockedAndShown ? canTrafficPaneHeight : 0);
+	                             trafficDockedAndShown ? (stacked ? canTrafficPaneHeight : canTrafficPaneWidth) : 0);
 
-	loggerResizeBar.setVisible(loggerShown);
-	canTrafficResizeBar.setVisible(trafficDockedAndShown);
+	loggerResizeBar.setVisible(stacked && loggerShown);
+	canTrafficResizeBar.setVisible(stacked && trafficDockedAndShown);
+	loggerSideResizeBar.setVisible(!stacked && loggerShown);
+	canTrafficSideResizeBar.setVisible(!stacked && trafficDockedAndShown);
 	canTrafficDockPane.setVisible(trafficDockedAndShown);
+}
+
+void ServerMainComponent::layout_terminal_screen()
+{
+	const int dataMaskWidth = dataMaskRenderer.getWidth();
+	const int dataMaskHeight = dataMaskRenderer.getHeight();
+	const int softKeyWidth = softKeyMaskRenderer.getWidth();
+	const int softKeyHeight = softKeyMaskRenderer.getHeight();
+	const int screenHeight = juce::jmax(dataMaskHeight, softKeyHeight);
+	const int dataMaskX = WorkingSetSelectorComponent::WIDTH + WORKING_SET_TO_DATA_GAP;
+	const int softKeyX = dataMaskX + dataMaskWidth + DATA_TO_SOFT_KEY_GAP;
+	const int screenWidth = softKeyX + softKeyWidth;
+
+	physicalTerminalPanel.set_terminal_screen_size(screenWidth, screenHeight);
+	workingSetSelector.setBounds(0, 0, WorkingSetSelectorComponent::WIDTH, screenHeight);
+	dataMaskRenderer.setTopLeftPosition(dataMaskX, (screenHeight - dataMaskHeight) / 2);
+	softKeyMaskRenderer.setTopLeftPosition(softKeyX, (screenHeight - softKeyHeight) / 2);
 }
 
 void ServerMainComponent::set_logger_visible(bool shouldBeVisible)
@@ -887,6 +915,7 @@ void ServerMainComponent::set_logger_visible(bool shouldBeVisible)
 	logger.setVisible(shouldBeVisible);
 	loggerViewport.setVisible(shouldBeVisible);
 	configure_vertical_layout();
+	ensure_workspace_fits_visible_panels();
 	resized();
 }
 
@@ -926,7 +955,6 @@ void ServerMainComponent::set_can_traffic_monitor_visible(bool shouldBeVisible)
 		return;
 	}
 
-	const bool wasDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
 	if (canTrafficMonitorWindow)
 	{
 		canTrafficMonitorWindow->detach_content();
@@ -954,16 +982,11 @@ void ServerMainComponent::set_can_traffic_monitor_visible(bool shouldBeVisible)
 		}
 	}
 
-	const bool isDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
 	configure_vertical_layout();
-	if (wasDockedAndVisible != isDockedAndVisible)
-	{
-		const int trafficAreaHeight = canTrafficPaneHeight + LAYOUT_RESIZER_SIZE;
-		const int heightDelta = isDockedAndVisible ? trafficAreaHeight : -trafficAreaHeight;
-		setSize(getWidth(), std::max(1, getHeight() + heightDelta));
-	}
+	ensure_workspace_fits_visible_panels();
 	resized();
 	mCommandManager.commandStatusChanged();
+	refresh_application_header();
 	save_settings();
 }
 
@@ -974,7 +997,6 @@ void ServerMainComponent::set_can_traffic_monitor_docked(bool shouldBeDocked)
 		return;
 	}
 
-	const bool wasDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
 	if (canTrafficMonitorWindow)
 	{
 		canTrafficMonitorWindow->detach_content();
@@ -1000,16 +1022,49 @@ void ServerMainComponent::set_can_traffic_monitor_docked(bool shouldBeDocked)
 		}
 	}
 
-	const bool isDockedAndVisible = canTrafficMonitorShown && canTrafficMonitorDocked;
 	configure_vertical_layout();
-	if (wasDockedAndVisible != isDockedAndVisible)
-	{
-		const int trafficAreaHeight = canTrafficPaneHeight + LAYOUT_RESIZER_SIZE;
-		const int heightDelta = isDockedAndVisible ? trafficAreaHeight : -trafficAreaHeight;
-		setSize(getWidth(), std::max(1, getHeight() + heightDelta));
-	}
+	ensure_workspace_fits_visible_panels();
 	resized();
+	refresh_application_header();
 	save_settings();
+}
+
+void ServerMainComponent::set_panel_layout(PanelLayout newLayout)
+{
+	if (panelLayout == newLayout)
+	{
+		return;
+	}
+
+	panelLayout = newLayout;
+	configure_vertical_layout();
+	ensure_workspace_fits_visible_panels();
+	resized();
+	mCommandManager.commandStatusChanged();
+	save_settings();
+}
+
+void ServerMainComponent::ensure_workspace_fits_visible_panels()
+{
+	if (PanelLayout::SideBySide != panelLayout)
+	{
+		return;
+	}
+
+	int requiredWidth = 320;
+	if (loggerViewport.isVisible())
+	{
+		requiredWidth += LAYOUT_RESIZER_SIZE + 240;
+	}
+	if (canTrafficMonitorShown && canTrafficMonitorDocked)
+	{
+		requiredWidth += LAYOUT_RESIZER_SIZE + 340;
+	}
+
+	if (getWidth() < requiredWidth)
+	{
+		setSize(requiredWidth, getHeight());
+	}
 }
 
 void ServerMainComponent::show_detached_can_traffic_monitor()
@@ -1043,7 +1098,10 @@ void ServerMainComponent::getAllCommands(juce::Array<juce::CommandID> &allComman
 	allCommands.add(static_cast<int>(CommandIDs::ClearISOData));
 	allCommands.add(static_cast<int>(CommandIDs::StartStop));
 	allCommands.add(static_cast<int>(CommandIDs::AutoStart));
+	allCommands.add(static_cast<int>(CommandIDs::ShowSystemLog));
 	allCommands.add(static_cast<int>(CommandIDs::ShowCANTrafficMonitor));
+	allCommands.add(static_cast<int>(CommandIDs::ArrangePanelsStacked));
+	allCommands.add(static_cast<int>(CommandIDs::ArrangePanelsSideBySide));
 #ifdef JUCE_WINDOWS
 	allCommands.add(static_cast<int>(CommandIDs::ConfigureCANHardware));
 #elif JUCE_LINUX
@@ -1121,9 +1179,30 @@ void ServerMainComponent::getCommandInfo(juce::CommandID commandID, ApplicationC
 		}
 		break;
 
+		case CommandIDs::ShowSystemLog:
+		{
+			result.setInfo("System Log", "Shows or hides the system log panel", "View", loggerViewport.isVisible() ? ApplicationCommandInfo::CommandFlags::isTicked : 0);
+		}
+		break;
+
+		case CommandIDs::ArrangePanelsStacked:
+		{
+			result.setInfo("Stack panels", "Arranges visible workspace panels vertically", "View", PanelLayout::Stacked == panelLayout ? ApplicationCommandInfo::CommandFlags::isTicked : 0);
+		}
+		break;
+
+		case CommandIDs::ArrangePanelsSideBySide:
+		{
+			result.setInfo("Panels side by side", "Arranges visible workspace panels horizontally", "View", PanelLayout::SideBySide == panelLayout ? ApplicationCommandInfo::CommandFlags::isTicked : 0);
+		}
+		break;
+
 		case CommandIDs::StartStop:
 		{
-			result.setInfo("Start/Stop", "Starts or stops the CAN interface", "Control", hasStartBeenCalled ? ApplicationCommandInfo::CommandFlags::isTicked : 0);
+			result.setInfo(hasStartBeenCalled ? "Stop VT" : "Start VT",
+			               hasStartBeenCalled ? "Stops the CAN interface" : "Starts the CAN interface",
+			               "Control",
+			               hasStartBeenCalled ? ApplicationCommandInfo::CommandFlags::isTicked : 0);
 		}
 		break;
 
@@ -1315,8 +1394,11 @@ bool ServerMainComponent::perform(const InvocationInfo &info)
 			auto diagnosticFileBuilder = std::make_unique<ZipFile::Builder>();
 
 			// for the current session add the current CAN log file only
-			auto canLogFileName = File(canLogPath);
-			diagnosticFileBuilder->addFile(canLogFileName, 9, canLogFileName.getFileName());
+			auto canLogFileName = canTrafficMonitor.current_log_file();
+			if (canLogFileName.existsAsFile())
+			{
+				diagnosticFileBuilder->addFile(canLogFileName, 9, canLogFileName.getFileName());
+			}
 
 			// Cut the output logging where we started
 			FileInputStream *fis = new FileInputStream(logger.getLogFile());
@@ -1387,6 +1469,29 @@ bool ServerMainComponent::perform(const InvocationInfo &info)
 		}
 		break;
 
+		case static_cast<int>(CommandIDs::ShowSystemLog):
+		{
+			set_logger_visible(!loggerViewport.isVisible());
+			mCommandManager.commandStatusChanged();
+			save_settings();
+			retVal = true;
+		}
+		break;
+
+		case static_cast<int>(CommandIDs::ArrangePanelsStacked):
+		{
+			set_panel_layout(PanelLayout::Stacked);
+			retVal = true;
+		}
+		break;
+
+		case static_cast<int>(CommandIDs::ArrangePanelsSideBySide):
+		{
+			set_panel_layout(PanelLayout::SideBySide);
+			retVal = true;
+		}
+		break;
+
 		case static_cast<int>(CommandIDs::StartStop):
 		{
 			if (hasStartBeenCalled)
@@ -1434,6 +1539,7 @@ bool ServerMainComponent::perform(const InvocationInfo &info)
 				start_can_interface();
 			}
 			mCommandManager.commandStatusChanged();
+			refresh_application_header();
 			retVal = true;
 		}
 		break;
@@ -1473,7 +1579,11 @@ PopupMenu ServerMainComponent::getMenuForIndex(int index, const juce::String &)
 
 		case 1:
 		{
+			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::ShowSystemLog));
 			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::ShowCANTrafficMonitor));
+			retVal.addSeparator();
+			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::ArrangePanelsStacked));
+			retVal.addCommandItem(&mCommandManager, static_cast<int>(CommandIDs::ArrangePanelsSideBySide));
 		}
 		break;
 
@@ -2126,15 +2236,9 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 		}
 		else if (Identifier("Layout") == child.getType())
 		{
-			if (!child.getProperty("WorkingSetPaneWidth").isVoid())
+			if (!child.getProperty("PanelOrientation").isVoid())
 			{
-				workingSetPaneWidth = juce::jlimit(WorkingSetSelectorComponent::BUTTON_WIDTH,
-				                                   260,
-				                                   static_cast<int>(child.getProperty("WorkingSetPaneWidth")));
-			}
-			if (!child.getProperty("SoftKeyPaneWidth").isVoid())
-			{
-				softKeyPaneWidth = juce::jlimit(80, 500, static_cast<int>(child.getProperty("SoftKeyPaneWidth")));
+				panelLayout = (1 == static_cast<int>(child.getProperty("PanelOrientation"))) ? PanelLayout::SideBySide : PanelLayout::Stacked;
 			}
 			if (!child.getProperty("LoggerPaneHeight").isVoid())
 			{
@@ -2148,6 +2252,14 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 				                                    1200,
 				                                    static_cast<int>(child.getProperty("CANTrafficPaneHeight")));
 			}
+			if (!child.getProperty("LoggerPaneWidth").isVoid())
+			{
+				loggerPaneWidth = juce::jlimit(240, 1600, static_cast<int>(child.getProperty("LoggerPaneWidth")));
+			}
+			if (!child.getProperty("CANTrafficPaneWidth").isVoid())
+			{
+				canTrafficPaneWidth = juce::jlimit(340, 2000, static_cast<int>(child.getProperty("CANTrafficPaneWidth")));
+			}
 		}
 		else if (Identifier("Logging") == child.getType())
 		{
@@ -2155,18 +2267,9 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 			{
 				isobus::CANStackLogger::set_log_level(static_cast<isobus::CANStackLogger::LoggingLevel>(static_cast<int>(child.getProperty("Level"))));
 			}
-			if (!child.getProperty("Shown").isVoid())
-			{
-				auto shown = static_cast<int>(child.getProperty("Shown"));
-
-				logger.setVisible(shown);
-				loggerViewport.setVisible(shown);
-			}
-			else
-			{
-				logger.setVisible(false);
-				loggerViewport.setVisible(false);
-			}
+			// The system log is an opt-in View panel for each application run.
+			logger.setVisible(false);
+			loggerViewport.setVisible(false);
 
 			if (!child.getProperty("SaveIopBeforeParse").isVoid())
 			{
@@ -2281,10 +2384,11 @@ void ServerMainComponent::save_settings()
 		}
 		canTrafficSettings.setProperty("Shown", static_cast<int>(canTrafficMonitorShown), nullptr);
 		canTrafficSettings.setProperty("Docked", static_cast<int>(canTrafficMonitorDocked), nullptr);
-		layoutSettings.setProperty("WorkingSetPaneWidth", workingSetPaneWidth, nullptr);
-		layoutSettings.setProperty("SoftKeyPaneWidth", softKeyPaneWidth, nullptr);
 		layoutSettings.setProperty("LoggerPaneHeight", loggerPaneHeight, nullptr);
 		layoutSettings.setProperty("CANTrafficPaneHeight", canTrafficPaneHeight, nullptr);
+		layoutSettings.setProperty("LoggerPaneWidth", loggerPaneWidth, nullptr);
+		layoutSettings.setProperty("CANTrafficPaneWidth", canTrafficPaneWidth, nullptr);
+		layoutSettings.setProperty("PanelOrientation", PanelLayout::SideBySide == panelLayout ? 1 : 0, nullptr);
 		loggingSettings.setProperty("Level", static_cast<int>(isobus::CANStackLogger::get_log_level()), nullptr);
 		loggingSettings.setProperty("Shown", static_cast<int>(logger.isVisible()), nullptr);
 		loggingSettings.setProperty("SaveIopBeforeParse", static_cast<int>(saveIopBeforeParse), nullptr);

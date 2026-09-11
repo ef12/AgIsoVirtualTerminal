@@ -6,6 +6,7 @@
 #include "ConfigureHardwareComponent.hpp"
 
 #include "ConfigureHardwareWindow.hpp"
+#include "ModernLookAndFeel.hpp"
 #include "ServerMainComponent.hpp"
 #include "isobus/isobus/can_stack_logger.hpp"
 #include "isobus/utility/to_string.hpp"
@@ -299,16 +300,25 @@ void ConfigureHardwareComponent::refresh_pcan_machine_device_status()
 void ConfigureHardwareComponent::paint(Graphics &graphics)
 {
 	auto bounds = getLocalBounds();
-	graphics.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
-	graphics.setColour(getLookAndFeel().findColour(Label::textColourId));
-	graphics.setFont(16.0f);
+	graphics.fillAll(AppTheme::canvas());
+	auto panel = bounds.toFloat().reduced(8.0f);
+	graphics.setColour(AppTheme::surface());
+	graphics.fillRoundedRectangle(panel, 10.0f);
+	graphics.setColour(AppTheme::border());
+	graphics.drawRoundedRectangle(panel, 10.0f, 1.0f);
+	graphics.setColour(AppTheme::text());
+	graphics.setFont(Font(17.0f, Font::bold));
 #ifdef JUCE_WINDOWS
-	graphics.drawFittedText("Select the CAN driver to use", 10, 10, bounds.getWidth() - 20, 54, Justification::centredTop, 3);
+	graphics.drawFittedText("CAN interface", 22, 18, bounds.getWidth() - 44, 24, Justification::centredLeft, 1);
+	graphics.setColour(AppTheme::textMuted());
+	graphics.setFont(12.5f);
+	graphics.drawFittedText("Choose how this terminal connects to the bus", 22, 41, bounds.getWidth() - 44, 20, Justification::centredLeft, 1);
 #elif JUCE_LINUX
 	graphics.drawFittedText("Enter the name of the CAN interface to use (like \"can0\")", 10, 10, bounds.getWidth() - 20, 54, Justification::centredTop, 3);
 #endif
 
 	graphics.setFont(12.0f);
+	graphics.setColour(AppTheme::textMuted());
 
 #ifdef JUCE_WINDOWS
 	graphics.drawFittedText("Hardware Driver", hardwareInterfaceSelector.getBounds().getX(), hardwareInterfaceSelector.getBounds().getY() - 14, hardwareInterfaceSelector.getBounds().getWidth(), 12, Justification::centredLeft, 1);

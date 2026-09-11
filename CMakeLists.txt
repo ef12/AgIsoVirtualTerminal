@@ -65,11 +65,13 @@ juce_generate_juce_header(AgISOVirtualTerminal)
 target_sources(
   AgISOVirtualTerminal
   PRIVATE src/Main.cpp
+          "src/ApplicationHeaderComponent.cpp"
           "src/ServerMainComponent.cpp"
           "src/DataMaskComponent.cpp"
           "src/WorkingSetSelectorComponent.cpp"
           "src/WorkingSetLoadingIndicatorComponent.cpp"
           "src/PictureGraphicComponent.cpp"
+          "src/PhysicalTerminalPanel.cpp"
           "src/WorkingSetComponent.cpp"
           "src/AlarmMaskComponent.cpp"
           "src/DataMaskRenderAreaComponent.cpp"
@@ -86,6 +88,7 @@ target_sources(
           "src/OutputMeterComponent.cpp"
           "src/InputBooleanComponent.cpp"
           "src/LoggerComponent.cpp"
+          "src/ModernLookAndFeel.cpp"
           "src/InputNumberComponent.cpp"
           "src/OutputEllipseComponent.cpp"
           "src/OutputLineComponent.cpp"

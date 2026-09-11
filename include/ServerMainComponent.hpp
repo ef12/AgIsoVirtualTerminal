@@ -1,9 +1,11 @@
 #pragma once
 
+#include "ApplicationHeaderComponent.hpp"
 #include "CANTrafficMonitorComponent.hpp"
 #include "ConfigureHardwareWindow.hpp"
 #include "DataMaskRenderAreaComponent.hpp"
 #include "LoggerComponent.hpp"
+#include "PhysicalTerminalPanel.hpp"
 #include "SoftKeyMaskComponent.hpp"
 #include "SoftKeyMaskRenderAreaComponent.hpp"
 #include "VT_NumberComponent.hpp"
@@ -27,7 +29,7 @@ public:
 	ServerMainComponent(std::shared_ptr<isobus::InternalControlFunction> serverControlFunction,
 	                    std::vector<std::shared_ptr<isobus::CANHardwarePlugin>> &canDrivers,
 	                    std::shared_ptr<ValueTree> settings,
-	                    const std::string &canLogPath_,
+	                    ASCIILogFile &trafficLogger,
 	                    std::uint8_t vtNumberArg = 0,
 	                    std::string screenCaptureDir = "");
 	~ServerMainComponent() override;
@@ -155,9 +157,18 @@ private:
 		GenerateLogPackageFromCurrentSession,
 		ClearISOData,
 		ConfigureCANHardware,
+		ShowSystemLog,
 		ShowCANTrafficMonitor,
+		ArrangePanelsStacked,
+		ArrangePanelsSideBySide,
 		StartStop,
 		AutoStart
+	};
+
+	enum class PanelLayout
+	{
+		Stacked,
+		SideBySide
 	};
 
 	SoftKeyMaskDimensions softKeyMaskDimensions;
@@ -195,35 +206,34 @@ private:
 	void repaint_data_and_soft_key_mask();
 	void check_load_settings(std::shared_ptr<ValueTree> settings);
 	bool start_can_interface();
-	void configure_horizontal_layout();
 	void configure_vertical_layout();
+	void layout_terminal_screen();
 	void set_logger_visible(bool shouldBeVisible);
 	void set_can_traffic_monitor_visible(bool shouldBeVisible);
 	void set_can_traffic_monitor_docked(bool shouldBeDocked);
+	void set_panel_layout(PanelLayout newLayout);
+	void ensure_workspace_fits_visible_panels();
 	void show_detached_can_traffic_monitor();
 	void remove_working_set(std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> workingSetToRemove);
 	void clear_iso_data();
+	void refresh_application_header();
 
 	const std::string ISO_DATA_PATH = "iso_data";
 	std::string screenCaptureDirArgument = "";
-	std::string canLogPath;
 
 	juce::ApplicationCommandManager mCommandManager;
 	WorkingSetSelectorComponent workingSetSelector;
 	DataMaskRenderAreaComponent dataMaskRenderer;
 	SoftKeyMaskRenderAreaComponent softKeyMaskRenderer;
-	juce::Component terminalPane;
-	juce::Viewport workingSetViewport;
-	juce::Viewport dataMaskViewport;
-	juce::Viewport softKeyMaskViewport;
+	PhysicalTerminalPanel physicalTerminalPanel;
 	juce::Component canTrafficDockPane;
-	juce::StretchableLayoutManager horizontalLayout;
 	juce::StretchableLayoutManager verticalLayout;
-	juce::StretchableLayoutResizerBar workingSetResizeBar;
-	juce::StretchableLayoutResizerBar softKeyResizeBar;
 	juce::StretchableLayoutResizerBar loggerResizeBar;
 	juce::StretchableLayoutResizerBar canTrafficResizeBar;
+	juce::StretchableLayoutResizerBar loggerSideResizeBar;
+	juce::StretchableLayoutResizerBar canTrafficSideResizeBar;
 	MenuBarComponent menuBar;
+	ApplicationHeaderComponent applicationHeader;
 	LoggerComponent logger;
 	Viewport loggerViewport;
 	CANTrafficMonitorComponent canTrafficMonitor;
@@ -252,15 +262,18 @@ private:
 	bool saveIopBeforeParse = false;
 	bool canTrafficMonitorShown = false;
 	bool canTrafficMonitorDocked = true;
-	int workingSetPaneWidth = WorkingSetSelectorComponent::WIDTH;
-	int softKeyPaneWidth = 0;
+	PanelLayout panelLayout = PanelLayout::Stacked;
 	int loggerPaneHeight = LoggerComponent::HEIGHT;
 	int canTrafficPaneHeight = CANTrafficMonitorComponent::DOCKED_HEIGHT;
+	int loggerPaneWidth = 360;
+	int canTrafficPaneWidth = 520;
 
 	static constexpr int LAYOUT_RESIZER_SIZE = 6;
 	static constexpr int MIN_TERMINAL_PANE_HEIGHT = 160;
 	static constexpr int MIN_LOGGER_PANE_HEIGHT = 80;
 	static constexpr int MIN_CAN_TRAFFIC_PANE_HEIGHT = 120;
+	static constexpr int WORKING_SET_TO_DATA_GAP = 6;
+	static constexpr int DATA_TO_SOFT_KEY_GAP = 14;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ServerMainComponent)
 };

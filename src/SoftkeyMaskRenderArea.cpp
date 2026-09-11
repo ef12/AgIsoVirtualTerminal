@@ -4,6 +4,7 @@
 ** @copyright  The Open-Agriculture Developers
 *******************************************************************************/
 #include "JuceManagedWorkingSetCache.hpp"
+#include "ModernLookAndFeel.hpp"
 #include "ServerMainComponent.hpp"
 #include "SoftKeyMaskRenderAreaComponent.hpp"
 
@@ -66,11 +67,23 @@ void SoftKeyMaskRenderAreaComponent::on_working_set_disconnect(std::shared_ptr<i
 
 void SoftKeyMaskRenderAreaComponent::paint(Graphics &g)
 {
-	g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+	g.fillAll(AppTheme::surface());
 
 	if (nullptr != parentWorkingSet)
 	{
+		g.setColour(AppTheme::border());
 		g.drawRect(0, 0, getWidth(), getHeight(), 1);
+	}
+	else
+	{
+		auto area = getLocalBounds().toFloat().reduced(10.0f);
+		g.setColour(AppTheme::surfaceRaised());
+		g.fillRoundedRectangle(area, 10.0f);
+		g.setColour(AppTheme::border());
+		g.drawRoundedRectangle(area, 10.0f, 1.0f);
+		g.setColour(AppTheme::textMuted().withAlpha(0.60f));
+		g.setFont(Font(11.0f, Font::bold));
+		g.drawFittedText("SOFT KEYS", getLocalBounds().reduced(12), Justification::centred, 1);
 	}
 }
 

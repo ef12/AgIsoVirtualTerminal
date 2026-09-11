@@ -12,6 +12,8 @@ ConfigureHardwareWindow::ConfigureHardwareWindow(ServerMainComponent &parentComp
   content(*this, canDrivers)
 {
 	setOpaque(true);
+	setUsingNativeTitleBar(false);
+	setTitleBarHeight(38);
 	setResizable(true, true);
 	setResizeLimits(360, 300, 900, 700);
 	setSize(400, 320);

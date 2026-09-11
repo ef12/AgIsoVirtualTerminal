@@ -16,7 +16,8 @@ CANTrafficMonitorWindow::CANTrafficMonitorWindow(CANTrafficMonitorComponent &con
                  DocumentWindow::closeButton),
   closeCallback(std::move(closeCallback))
 {
-	setUsingNativeTitleBar(true);
+	setUsingNativeTitleBar(false);
+	setTitleBarHeight(38);
 	setResizable(true, true);
 	setResizeLimits(520, 240, 4096, 4096);
 	setContentNonOwned(&content, false);

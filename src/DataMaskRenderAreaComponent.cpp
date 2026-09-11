@@ -6,6 +6,7 @@
 #include "DataMaskRenderAreaComponent.hpp"
 #include "AppImages.h"
 #include "JuceManagedWorkingSetCache.hpp"
+#include "ModernLookAndFeel.hpp"
 #include "ServerMainComponent.hpp"
 
 DataMaskRenderAreaComponent::DataMaskRenderAreaComponent(ServerMainComponent &parentServer) :
@@ -45,22 +46,85 @@ void DataMaskRenderAreaComponent::on_working_set_disconnect(std::shared_ptr<isob
 
 void DataMaskRenderAreaComponent::paint(Graphics &g)
 {
-	g.fillAll(getLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId));
+	g.fillAll(AppTheme::canvas());
 
 	if (nullptr != parentWorkingSet)
 	{
+		g.setColour(AppTheme::border());
 		g.drawRect(0, 0, getWidth(), getHeight(), 1);
 	}
 	else
 	{
-		auto logoImage = ImageCache::getFromMemory(AppImages::logo2_png, AppImages::logo2_pngSize);
-		g.drawImage(logoImage, 0, 0, 400, 400, 0, 0, logoImage.getWidth(), logoImage.getHeight());
-		g.setColour(Colours::white);
-		g.drawText("No Working Sets Are Active", 0, 400, 400, 80, Justification::centredTop, true);
-
-		if (!hasStarted)
+		const auto bounds = getLocalBounds().toFloat();
+		for (float x = 14.0f; x < bounds.getWidth(); x += 24.0f)
 		{
-			g.drawFittedText("To start the VT server, select \"Start/Stop\" from the control menu in the top left.", 0, 440, 400, 40, Justification::centredTop, 2);
+			for (float y = 14.0f; y < bounds.getHeight(); y += 24.0f)
+			{
+				g.setColour(AppTheme::border().withAlpha(0.20f));
+				g.fillEllipse(x, y, 2.0f, 2.0f);
+			}
+		}
+
+		auto card = bounds.reduced(juce::jmax(18.0f, bounds.getWidth() * 0.08f),
+		                           juce::jmax(18.0f, bounds.getHeight() * 0.08f));
+		g.setColour(AppTheme::surface().withAlpha(0.95f));
+		g.fillRoundedRectangle(card, 16.0f);
+		g.setColour(AppTheme::border());
+		g.drawRoundedRectangle(card, 16.0f, 1.0f);
+
+		auto logoImage = ImageCache::getFromMemory(AppImages::logo2_png, AppImages::logo2_pngSize);
+		const float logoSize = juce::jlimit(38.0f,
+		                                    106.0f,
+		                                    juce::jmin(card.getWidth() * 0.34f, card.getHeight() * 0.31f));
+		const auto logoBounds = Rectangle<int>(static_cast<int>(card.getCentreX() - (logoSize * 0.5f)),
+		                                       static_cast<int>(card.getY() + juce::jmax(8.0f, card.getHeight() * 0.07f)),
+		                                       static_cast<int>(logoSize),
+		                                       static_cast<int>(logoSize));
+		g.setOpacity(0.90f);
+		g.drawImageWithin(logoImage, logoBounds.getX(), logoBounds.getY(), logoBounds.getWidth(), logoBounds.getHeight(), RectanglePlacement::centred);
+		g.setOpacity(1.0f);
+
+		const int headingY = logoBounds.getBottom() + 7;
+		g.setColour(AppTheme::text());
+		g.setFont(Font(card.getHeight() < 220.0f ? 16.0f : 20.0f, Font::bold));
+		g.drawFittedText("Ready for a working set",
+		                 static_cast<int>(card.getX()) + 14,
+		                 headingY,
+		                 static_cast<int>(card.getWidth()) - 28,
+		                 25,
+		                 Justification::centred,
+		                 1);
+
+		const String statusText = hasStarted ? "Listening for ISO 11783 clients" : "CAN interface is in standby";
+		const Colour statusColour = hasStarted ? AppTheme::success() : AppTheme::warning();
+		auto statusBounds = Rectangle<int>(static_cast<int>(card.getX()) + 14,
+		                                   headingY + 28,
+		                                   static_cast<int>(card.getWidth()) - 28,
+		                                   23);
+		g.setColour(statusColour);
+		g.fillEllipse(static_cast<float>(statusBounds.getX() + 2), static_cast<float>(statusBounds.getCentreY()) - 3.5f, 7.0f, 7.0f);
+		g.setFont(Font(13.0f, Font::bold));
+		g.drawFittedText(statusText,
+		                 statusBounds.getX() + 15,
+		                 statusBounds.getY(),
+		                 statusBounds.getWidth() - 15,
+		                 statusBounds.getHeight(),
+		                 Justification::centredLeft,
+		                 1);
+
+		const int instructionY = statusBounds.getBottom() + 4;
+		const int instructionHeight = static_cast<int>(card.getBottom()) - instructionY - 7;
+		if (instructionHeight >= 16)
+		{
+			g.setColour(AppTheme::textMuted());
+			g.setFont(13.0f);
+			g.drawFittedText(hasStarted ? "The display will activate when an implement connects." : "Use START VT above to begin listening.",
+			                 static_cast<int>(card.getX()) + 18,
+			                 instructionY,
+			                 static_cast<int>(card.getWidth()) - 36,
+			                 instructionHeight,
+			                 Justification::centredTop,
+			                 2);
 		}
 	}
 }

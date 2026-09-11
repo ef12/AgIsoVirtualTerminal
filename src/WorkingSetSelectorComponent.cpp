@@ -5,6 +5,7 @@
 *******************************************************************************/
 #include "WorkingSetSelectorComponent.hpp"
 #include "JuceManagedWorkingSetCache.hpp"
+#include "ModernLookAndFeel.hpp"
 #include "ServerMainComponent.hpp"
 #include "WorkingSetLoadingIndicatorComponent.hpp"
 #include "isobus/utility/system_timing.hpp"
@@ -39,8 +40,9 @@ void WorkingSetSelectorComponent::update_drawn_working_sets(std::vector<std::sha
 
 void WorkingSetSelectorComponent::paint(Graphics &g)
 {
-	g.setColour(getLookAndFeel().findColour(ResizableWindow::backgroundColourId));
-	g.fillAll();
+	g.fillAll(AppTheme::surface());
+	g.setColour(AppTheme::border().withAlpha(0.7f));
+	g.fillRect(getWidth() - 1, 0, 1, getHeight());
 
 	// draw rounded rectangle around the active working set selector
 	int numberOfSquares = 0;
@@ -50,8 +52,14 @@ void WorkingSetSelectorComponent::paint(Graphics &g)
 		{
 			if (ws->workingSet->get_control_function()->get_NAME().get_full_name() == parentServer.get_active_working_set()->get_control_function()->get_NAME().get_full_name())
 			{
-				g.setColour(juce::Colours::yellow.withAlpha(0.4f));
-				g.drawRoundedRectangle(button_padding() - 2, button_padding() + (numberOfSquares * (BUTTON_HEIGHT + button_padding())) - 2, BUTTON_WIDTH + 4, BUTTON_HEIGHT + 4, 4, 4);
+				const auto activeBounds = Rectangle<float>(static_cast<float>(button_padding() - 4),
+				                                           static_cast<float>(button_padding() + (numberOfSquares * (BUTTON_HEIGHT + button_padding())) - 4),
+				                                           static_cast<float>(BUTTON_WIDTH + 8),
+				                                           static_cast<float>(BUTTON_HEIGHT + 8));
+				g.setColour(AppTheme::accent().withAlpha(0.12f));
+				g.fillRoundedRectangle(activeBounds, 8.0f);
+				g.setColour(AppTheme::accent());
+				g.drawRoundedRectangle(activeBounds, 8.0f, 2.0f);
 			}
 		}
 		numberOfSquares++;

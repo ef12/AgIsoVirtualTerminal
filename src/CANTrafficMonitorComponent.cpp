@@ -8,6 +8,8 @@
 //================================================================================================
 #include "CANTrafficMonitorComponent.hpp"
 
+#include "ModernLookAndFeel.hpp"
+
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
@@ -27,19 +29,23 @@ namespace
 	};
 }
 
-CANTrafficMonitorComponent::CANTrafficMonitorComponent() :
+CANTrafficMonitorComponent::CANTrafficMonitorComponent(ASCIILogFile &trafficLogger_) :
   table("CAN Traffic", this),
   clearButton("Clear"),
   pauseButton("Pause"),
+  recordButton("Record..."),
   autoScrollButton("Auto-scroll"),
-  dockButton("Undock")
+  dockButton("Undock"),
+  trafficLogger(trafficLogger_)
 {
 	initialTimestampMilliseconds = Time::getMillisecondCounterHiRes();
 
 	titleLabel.setText("CAN Traffic", dontSendNotification);
-	titleLabel.setFont(Font(15.0f, Font::bold));
+	titleLabel.setFont(Font(16.5f, Font::bold));
 	titleLabel.setJustificationType(Justification::centredLeft);
+	titleLabel.setColour(Label::textColourId, AppTheme::text());
 	statusLabel.setJustificationType(Justification::centredLeft);
+	statusLabel.setColour(Label::textColourId, AppTheme::textMuted());
 
 	auto &header = table.getHeader();
 	header.addColumn("Time (s)", ColumnIds::Time, 90, 70, 140);
@@ -50,10 +56,10 @@ CANTrafficMonitorComponent::CANTrafficMonitorComponent() :
 	header.addColumn("DLC", ColumnIds::DataLength, 45, 40, 60);
 	header.addColumn("Data", ColumnIds::Data, 300, 140, 1000);
 	header.setStretchToFitActive(true);
-	table.setRowHeight(22);
-	table.setHeaderHeight(24);
-	table.setColour(ListBox::backgroundColourId, Colour(0xff17191c));
-	table.setColour(ListBox::outlineColourId, Colour(0xff4b4e52));
+	table.setRowHeight(24);
+	table.setHeaderHeight(28);
+	table.setColour(ListBox::backgroundColourId, AppTheme::surface());
+	table.setColour(ListBox::outlineColourId, AppTheme::border());
 	table.setOutlineThickness(1);
 
 	autoScrollButton.setToggleState(true, dontSendNotification);
@@ -66,6 +72,9 @@ CANTrafficMonitorComponent::CANTrafficMonitorComponent() :
 	clearButton.onClick = [this]() {
 		clear_frames();
 	};
+	recordButton.onClick = [this]() {
+		toggle_recording();
+	};
 	dockButton.onClick = [this]() {
 		if (dockToggleCallback)
 		{
@@ -77,6 +86,7 @@ CANTrafficMonitorComponent::CANTrafficMonitorComponent() :
 	addAndMakeVisible(statusLabel);
 	addAndMakeVisible(clearButton);
 	addAndMakeVisible(pauseButton);
+	addAndMakeVisible(recordButton);
 	addAndMakeVisible(autoScrollButton);
 	addAndMakeVisible(dockButton);
 	addAndMakeVisible(table);
@@ -100,18 +110,28 @@ CANTrafficMonitorComponent::~CANTrafficMonitorComponent()
 
 void CANTrafficMonitorComponent::paint(Graphics &graphics)
 {
-	graphics.fillAll(Colour(0xff25282c));
+	graphics.fillAll(AppTheme::surface());
+	graphics.setColour(AppTheme::border().withAlpha(0.8f));
+	graphics.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 7.0f, 1.0f);
 }
 
 void CANTrafficMonitorComponent::resized()
 {
-	auto bounds = getLocalBounds().reduced(6);
-	auto toolbar = bounds.removeFromTop(30);
-	dockButton.setBounds(toolbar.removeFromRight(78).reduced(2));
-	clearButton.setBounds(toolbar.removeFromRight(62).reduced(2));
-	pauseButton.setBounds(toolbar.removeFromRight(72).reduced(2));
-	autoScrollButton.setBounds(toolbar.removeFromRight(100).reduced(2));
-	titleLabel.setBounds(toolbar.removeFromLeft(105));
+	auto bounds = getLocalBounds().reduced(8);
+	auto toolbar = bounds.removeFromTop(34);
+	const bool compact = getWidth() < 650;
+	const bool veryCompact = getWidth() < 500;
+	dockButton.setBounds(toolbar.removeFromRight(compact ? 58 : 78).reduced(2));
+	clearButton.setBounds(toolbar.removeFromRight(compact ? 50 : 62).reduced(2));
+	pauseButton.setBounds(toolbar.removeFromRight(compact ? 60 : 72).reduced(2));
+	recordButton.setBounds(toolbar.removeFromRight(compact ? 82 : 92).reduced(2));
+	autoScrollButton.setVisible(!compact);
+	if (!compact)
+	{
+		autoScrollButton.setBounds(toolbar.removeFromRight(100).reduced(2));
+	}
+	titleLabel.setBounds(toolbar.removeFromLeft(veryCompact ? 72 : 105));
+	statusLabel.setVisible(!veryCompact);
 	statusLabel.setBounds(toolbar);
 	bounds.removeFromTop(4);
 	table.setBounds(bounds);
@@ -132,6 +152,11 @@ void CANTrafficMonitorComponent::set_capture_enabled(bool enabled)
 	captureEnabled.store(enabled);
 }
 
+File CANTrafficMonitorComponent::current_log_file() const
+{
+	return trafficLogger.current_log_file();
+}
+
 int CANTrafficMonitorComponent::getNumRows()
 {
 	return static_cast<int>(displayedFrames.size());
@@ -141,13 +166,13 @@ void CANTrafficMonitorComponent::paintRowBackground(Graphics &graphics, int rowN
 {
 	if (rowIsSelected)
 	{
-		graphics.fillAll(Colour(0xff365d7d));
+		graphics.fillAll(AppTheme::accent().withAlpha(0.30f));
 	}
 	else if ((rowNumber >= 0) && (rowNumber < static_cast<int>(displayedFrames.size())))
 	{
 		const auto &frame = displayedFrames.at(static_cast<std::size_t>(rowNumber));
-		const Colour baseColour = (Direction::Receive == frame.direction) ? Colour(0xff17241d) : Colour(0xff18212a);
-		graphics.fillAll((0 == (rowNumber % 2)) ? baseColour : baseColour.brighter(0.08f));
+		const Colour baseColour = (Direction::Receive == frame.direction) ? Colour(0xff10231d) : Colour(0xff101f2b);
+		graphics.fillAll((0 == (rowNumber % 2)) ? baseColour : baseColour.brighter(0.045f));
 	}
 }
 
@@ -207,9 +232,9 @@ void CANTrafficMonitorComponent::paintCell(Graphics &graphics, int rowNumber, in
 	}
 	else
 	{
-		graphics.setColour((Direction::Receive == frame.direction) ? Colour(0xff9ee6b8) : Colour(0xff9dcdf5));
+		graphics.setColour((Direction::Receive == frame.direction) ? AppTheme::receive() : AppTheme::transmit());
 	}
-	graphics.setFont(13.0f);
+	graphics.setFont(12.5f);
 	graphics.drawText(text, 4, 0, width - 8, height, Justification::centredLeft, true);
 }
 
@@ -303,5 +328,62 @@ void CANTrafficMonitorComponent::update_status_label()
 	{
 		status += " | Paused";
 	}
+	if (trafficLogger.is_recording())
+	{
+		const auto recordingFile = trafficLogger.current_log_file();
+		status += " | REC " + recordingFile.getFileName();
+		recordButton.setButtonText("Stop record");
+		recordButton.setColour(TextButton::buttonColourId, AppTheme::danger());
+		recordButton.setTooltip("Recording to " + recordingFile.getFullPathName() + ". Click to stop and flush the file.");
+	}
+	else
+	{
+		recordButton.setButtonText("Record...");
+		recordButton.removeColour(TextButton::buttonColourId);
+		recordButton.setTooltip("Choose a .asc file and start recording received and transmitted CAN frames");
+	}
 	statusLabel.setText(status, dontSendNotification);
+}
+
+void CANTrafficMonitorComponent::toggle_recording()
+{
+	if (trafficLogger.is_recording())
+	{
+		trafficLogger.stop();
+		update_status_label();
+		return;
+	}
+
+	choose_recording_file();
+}
+
+void CANTrafficMonitorComponent::choose_recording_file()
+{
+	auto fileNameTime = Time::getCurrentTime().toString(true, true, true, false).replaceCharacter(' ', '_').replaceCharacter(':', '_');
+	const auto suggestedFile = File::getSpecialLocation(File::userDocumentsDirectory)
+	                             .getChildFile("CAN_Traffic_" + fileNameTime + ".asc");
+	recordingFileChooser = std::make_unique<FileChooser>("Record CAN traffic", suggestedFile, "*.asc");
+	Component::SafePointer<CANTrafficMonitorComponent> safeThis(this);
+	recordingFileChooser->launchAsync(FileBrowserComponent::saveMode |
+	                                    FileBrowserComponent::canSelectFiles |
+	                                    FileBrowserComponent::warnAboutOverwriting,
+	                                  [safeThis](const FileChooser &chooser) {
+		                                  if (nullptr == safeThis)
+		                                  {
+			                                  return;
+		                                  }
+
+		                                  const auto selectedFile = chooser.getResult();
+		                                  if ((File{} != selectedFile) && !safeThis->trafficLogger.start(selectedFile))
+		                                  {
+			                                  AlertWindow::showAsync(MessageBoxOptions()
+			                                                           .withIconType(MessageBoxIconType::WarningIcon)
+			                                                           .withTitle("CAN recording could not be started")
+			                                                           .withMessage("The selected file could not be created or replaced.")
+			                                                           .withButton("OK"),
+			                                                         nullptr);
+		                                  }
+		                                  safeThis->recordingFileChooser.reset();
+		                                  safeThis->update_status_label();
+	                                  });
 }

@@ -9,6 +9,7 @@
 #ifndef CAN_TRAFFIC_MONITOR_COMPONENT_HPP
 #define CAN_TRAFFIC_MONITOR_COMPONENT_HPP
 
+#include "ASCIILogFile.hpp"
 #include "JuceHeader.h"
 #include "isobus/hardware_integration/can_hardware_interface.hpp"
 
@@ -24,7 +25,7 @@ class CANTrafficMonitorComponent : public Component
   , private AsyncUpdater
 {
 public:
-	CANTrafficMonitorComponent();
+	explicit CANTrafficMonitorComponent(ASCIILogFile &trafficLogger);
 	~CANTrafficMonitorComponent() override;
 
 	void paint(Graphics &graphics) override;
@@ -33,6 +34,7 @@ public:
 	void set_dock_toggle_callback(std::function<void()> callback);
 	void set_is_docked(bool isDocked);
 	void set_capture_enabled(bool enabled);
+	File current_log_file() const;
 
 	static constexpr int DOCKED_HEIGHT = 260;
 
@@ -62,6 +64,8 @@ private:
 	void queue_frame(const isobus::CANMessageFrame &frame, Direction direction);
 	void clear_frames();
 	void update_status_label();
+	void toggle_recording();
+	void choose_recording_file();
 
 	static constexpr std::size_t MAX_DISPLAYED_FRAMES = 5000;
 	static constexpr std::size_t MAX_PENDING_FRAMES = 2000;
@@ -71,8 +75,11 @@ private:
 	Label statusLabel;
 	TextButton clearButton;
 	TextButton pauseButton;
+	TextButton recordButton;
 	ToggleButton autoScrollButton;
 	TextButton dockButton;
+	std::unique_ptr<FileChooser> recordingFileChooser;
+	ASCIILogFile &trafficLogger;
 
 	std::deque<FrameRecord> displayedFrames;
 	std::deque<FrameRecord> pendingFrames;

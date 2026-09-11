@@ -15,7 +15,7 @@
 #endif
 
 AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
-                                                        const std::string &canLogPath,
+                                                        ASCIILogFile &trafficLogger,
                                                         int vtNumberCmdLineArg,
                                                         std::string screenCaptureDir) :
   DocumentWindow(name,
@@ -107,14 +107,17 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 	serverNAME.set_industry_group(2);
 	serverNAME.set_manufacturer_code(1407);
 	serverInternalControlFunction = isobus::CANNetworkManager::CANNetwork.create_internal_control_function(serverNAME, 0, 0x26);
-	setUsingNativeTitleBar(true);
-	setContentOwned(new ServerMainComponent(serverInternalControlFunction, canDrivers, settings.settingsValueTree(), canLogPath, vtNumber, screenCaptureDir), true);
+#if !(JUCE_IOS || JUCE_ANDROID)
+	setUsingNativeTitleBar(false);
+	setTitleBarHeight(38);
+#endif
+	setContentOwned(new ServerMainComponent(serverInternalControlFunction, canDrivers, settings.settingsValueTree(), trafficLogger, vtNumber, screenCaptureDir), true);
 
 #if JUCE_IOS || JUCE_ANDROID
 	setFullScreen(true);
 #else
 	setResizable(true, true);
-	setResizeLimits(360, 420, 8192, 8192);
+	setResizeLimits(420, 500, 8192, 8192);
 	centreWithSize(getWidth(), getHeight());
 #endif
 
@@ -132,13 +135,6 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 
 void AgISOVirtualTerminalApplication::MainWindow::closeButtonPressed()
 {
-	// This is called when the user tries to close this window. Here, we'll just
-	// ask the app to quit when this happens, but you can change this to do
-	// whatever you need.
-	if (isobus::CANHardwareInterface::is_running())
-	{
-		isobus::CANHardwareInterface::stop();
-	}
 	JUCEApplication::getInstance()->systemRequestedQuit();
 }
 

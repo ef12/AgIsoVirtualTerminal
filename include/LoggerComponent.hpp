@@ -19,9 +19,11 @@
 class LoggerComponent : public Component
   , public FileLogger
   , public isobus::CANStackLogger
+  , private AsyncUpdater
 {
 public:
 	LoggerComponent();
+	~LoggerComponent() override;
 
 	void paint(Graphics &g) override;
 
@@ -38,8 +40,12 @@ private:
 	};
 	static constexpr std::size_t MAX_NUMBER_MESSAGES = 3000;
 	std::deque<LogData> loggedMessages;
+	std::deque<LogData> pendingMessages;
+	CriticalSection pendingMessagesLock;
 
 	std::uint64_t startPos = 0;
+
+	void handleAsyncUpdate() override;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoggerComponent)
 };

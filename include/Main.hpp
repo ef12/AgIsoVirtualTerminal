@@ -8,10 +8,13 @@
 #include <JuceHeader.h>
 #include "ASCIILogFile.hpp"
 #include "AppImages.h"
+#include "ModernLookAndFeel.hpp"
 #include "ServerMainComponent.hpp"
 #include "isobus/hardware_integration/can_hardware_interface.hpp"
 #include "isobus/isobus/can_internal_control_function.hpp"
 #include "isobus/isobus/can_network_manager.hpp"
+
+#include <thread>
 
 #ifdef JUCE_WINDOWS
 #include "CANAPI2MachineDeviceConfiguration.hpp"
@@ -46,6 +49,7 @@ public:
 	void initialise(const juce::String &commandLineParameters) override
 	{
 		SystemStats::setApplicationCrashHandler(onCrash);
+		LookAndFeel::setDefaultLookAndFeel(&modernLookAndFeel);
 
 		juce::StringArray args;
 		args.addTokens(commandLineParameters, true);
@@ -88,26 +92,54 @@ public:
 			}
 		}
 
-		mainWindow.reset(new MainWindow(getApplicationNameWithBuildInfo(), logFile.currentLogFile(), vtNumber, screenCaptureDir));
+		mainWindow.reset(new MainWindow(getApplicationNameWithBuildInfo(), logFile, vtNumber, screenCaptureDir));
 	}
 
 	void shutdown() override
 	{
-		// Add your application's shutdown code here..
+		if (shutdownThread.joinable())
+		{
+			shutdownThread.join();
+		}
 
 		if (isobus::CANHardwareInterface::is_running())
 		{
 			isobus::CANHardwareInterface::stop();
 		}
 		mainWindow = nullptr; // (deletes our window)
+		LookAndFeel::setDefaultLookAndFeel(nullptr);
 	}
 
 	//==============================================================================
 	void systemRequestedQuit() override
 	{
-		// This is called when the app is being asked to quit: you can ignore this
-		// request and let the app carry on running, or call quit() to allow the app to close.
-		quit();
+		if (shutdownRequested)
+		{
+			return;
+		}
+
+		shutdownRequested = true;
+		if (mainWindow)
+		{
+			mainWindow->setEnabled(false);
+			mainWindow->setName(getApplicationNameWithBuildInfo() + " - Shutting down...");
+		}
+
+		if (!isobus::CANHardwareInterface::is_running())
+		{
+			quit();
+			return;
+		}
+
+		// CAN shutdown joins its worker thread. Run it away from JUCE's message
+		// thread so a CAN callback that is finishing a GUI update cannot deadlock
+		// against the window close operation.
+		shutdownThread = std::thread([this]() {
+			isobus::CANHardwareInterface::stop();
+			MessageManager::callAsync([this]() {
+				quit();
+			});
+		});
 	}
 
 	void anotherInstanceStarted(const juce::String &) override
@@ -149,10 +181,11 @@ public:
 		/**
      * @brief MainWindow
      * @param name - window name to be displayed in the window title
+	 * @param trafficLogger - controllable Vector ASCII CAN traffic recorder
      * @param vtNumberCmdLineArg - in the range of 1 - 32
      * @param screenCaptureDir - path to the directory where the screen capture results will be saved
      */
-		MainWindow(juce::String name, const std::string &canLogPath, int vtNumberCmdLineArg = 0, std::string screenCaptureDir = "");
+		MainWindow(juce::String name, ASCIILogFile &trafficLogger, int vtNumberCmdLineArg = 0, std::string screenCaptureDir = "");
 
 		/* Note: Be careful if you override any DocumentWindow methods - the base
            class uses a lot of them, so by overriding you might break its functionality.
@@ -170,6 +203,9 @@ public:
 	};
 
 private:
-	std::unique_ptr<MainWindow> mainWindow;
+	ModernLookAndFeel modernLookAndFeel;
 	ASCIILogFile logFile;
+	std::unique_ptr<MainWindow> mainWindow;
+	std::thread shutdownThread;
+	bool shutdownRequested = false;
 };
