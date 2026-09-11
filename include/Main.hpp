@@ -13,6 +13,10 @@
 #include "isobus/isobus/can_internal_control_function.hpp"
 #include "isobus/isobus/can_network_manager.hpp"
 
+#ifdef JUCE_WINDOWS
+#include "CANAPI2MachineDeviceConfiguration.hpp"
+#endif
+
 //==============================================================================
 class AgISOVirtualTerminalApplication : public juce::JUCEApplication
 {
@@ -45,6 +49,24 @@ public:
 
 		juce::StringArray args;
 		args.addTokens(commandLineParameters, true);
+
+#ifdef JUCE_WINDOWS
+		for (const auto &arg : args)
+		{
+			if (arg.startsWith("--set-canapi2-machine-device="))
+			{
+				CANAPI2MachineDeviceConfiguration::Device requestedDevice;
+				int result = 13;
+				if (CANAPI2MachineDeviceConfiguration::try_parse_helper_argument(arg.toStdString(), requestedDevice))
+				{
+					result = CANAPI2MachineDeviceConfiguration::set_machine_default_device(requestedDevice);
+				}
+				setApplicationReturnValue(result);
+				quit();
+				return;
+			}
+		}
+#endif
 
 		std::uint8_t vtNumber = 0;
 		std::string screenCaptureDir;

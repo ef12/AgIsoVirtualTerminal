@@ -25,10 +25,13 @@ public:
 	void resized() override;
 
 private:
+	void refresh_pcan_machine_device_status();
+
 	ComboBox hardwareInterfaceSelector;
 	TextEditor socketCANNameEditor;
 	TextEditor touCANSerialEditor;
 	TextEditor canAPI2NetNameEditor;
+	Label canAPI2MachineDeviceStatusLabel;
 	TextButton okButton;
 	std::vector<std::shared_ptr<isobus::CANHardwarePlugin>> &parentCANDrivers;
 

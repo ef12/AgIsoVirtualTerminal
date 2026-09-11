@@ -1369,7 +1369,7 @@ bool ServerMainComponent::perform(const InvocationInfo &info)
 		{
 			configureHardwareWindow = std::make_unique<ConfigureHardwareWindow>(*this, parentCANDrivers);
 			configureHardwareWindow->addToDesktop();
-			Rectangle<int> area(0, 0, 400, 280);
+			Rectangle<int> area(0, 0, configureHardwareWindow->getWidth(), configureHardwareWindow->getHeight());
 			RectanglePlacement placement(RectanglePlacement::centred |
 			                             RectanglePlacement::doNotResize);
 			auto result = placement.appliedTo(area, Desktop::getInstance().getDisplays().getPrimaryDisplay()->userArea.reduced(20));
@@ -1651,11 +1651,11 @@ bool ServerMainComponent::send_pointing_event_message(std::uint16_t xPosition, s
 		}
 
 		retVal = isobus::CANNetworkManager::CANNetwork.send_can_message(static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::VirtualTerminalToECU),
-		                                                                 buffer.data(),
-		                                                                 isobus::CAN_DATA_LENGTH,
-		                                                                 get_internal_control_function(),
-		                                                                 destination,
-		                                                                 get_priority());
+		                                                                buffer.data(),
+		                                                                isobus::CAN_DATA_LENGTH,
+		                                                                get_internal_control_function(),
+		                                                                destination,
+		                                                                get_priority());
 	}
 	return retVal;
 }
@@ -2129,8 +2129,8 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 			if (!child.getProperty("WorkingSetPaneWidth").isVoid())
 			{
 				workingSetPaneWidth = juce::jlimit(WorkingSetSelectorComponent::BUTTON_WIDTH,
-				                                       260,
-				                                       static_cast<int>(child.getProperty("WorkingSetPaneWidth")));
+				                                   260,
+				                                   static_cast<int>(child.getProperty("WorkingSetPaneWidth")));
 			}
 			if (!child.getProperty("SoftKeyPaneWidth").isVoid())
 			{
@@ -2139,14 +2139,14 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 			if (!child.getProperty("LoggerPaneHeight").isVoid())
 			{
 				loggerPaneHeight = juce::jlimit(MIN_LOGGER_PANE_HEIGHT,
-				                                     1200,
-				                                     static_cast<int>(child.getProperty("LoggerPaneHeight")));
+				                                1200,
+				                                static_cast<int>(child.getProperty("LoggerPaneHeight")));
 			}
 			if (!child.getProperty("CANTrafficPaneHeight").isVoid())
 			{
 				canTrafficPaneHeight = juce::jlimit(MIN_CAN_TRAFFIC_PANE_HEIGHT,
-				                                         1200,
-				                                         static_cast<int>(child.getProperty("CANTrafficPaneHeight")));
+				                                    1200,
+				                                    static_cast<int>(child.getProperty("CANTrafficPaneHeight")));
 			}
 		}
 		else if (Identifier("Logging") == child.getType())
