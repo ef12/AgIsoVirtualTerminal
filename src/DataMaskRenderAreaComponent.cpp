@@ -7,6 +7,7 @@
 #include "AppImages.h"
 #include "JuceManagedWorkingSetCache.hpp"
 #include "ModernLookAndFeel.hpp"
+#include "NumericValueConversion.hpp"
 #include "ServerMainComponent.hpp"
 
 DataMaskRenderAreaComponent::DataMaskRenderAreaComponent(ServerMainComponent &parentServer) :
@@ -387,7 +388,8 @@ void DataMaskRenderAreaComponent::mouseUp(const MouseEvent &event)
 						{
 							inputNumberModal.reset(new AlertWindow("Input Number", "Enter a value for this input number, then press OK.", MessageBoxIconType::QuestionIcon));
 
-							float scaledValue = (clickedNumber->get_value() + clickedNumber->get_offset()) * clickedNumber->get_scale();
+							std::uint32_t rawValue = clickedNumber->get_value();
+							double scaledValue = NumericValueConversion::to_displayed_value(rawValue, clickedNumber->get_offset(), clickedNumber->get_scale());
 
 							if (isobus::NULL_OBJECT_ID != clickedNumber->get_variable_reference())
 							{
@@ -397,19 +399,20 @@ void DataMaskRenderAreaComponent::mouseUp(const MouseEvent &event)
 								{
 									if (isobus::VirtualTerminalObjectType::NumberVariable == child->get_object_type())
 									{
-										scaledValue = (std::static_pointer_cast<isobus::NumberVariable>(child)->get_value() + clickedNumber->get_offset()) * clickedNumber->get_scale();
+										rawValue = std::static_pointer_cast<isobus::NumberVariable>(child)->get_value();
+										scaledValue = NumericValueConversion::to_displayed_value(rawValue, clickedNumber->get_offset(), clickedNumber->get_scale());
 									}
 								}
 							}
 
 							inputNumberSlider.reset(new Slider(Slider::SliderStyle::LinearHorizontal, Slider::TextBoxAbove));
-							inputNumberSlider->setRange((static_cast<float>(clickedNumber->get_minimum_value()) + clickedNumber->get_offset()) * clickedNumber->get_scale(),
-							                            (static_cast<float>(clickedNumber->get_maximum_value()) + clickedNumber->get_offset()) * clickedNumber->get_scale());
+							inputNumberSlider->setRange(NumericValueConversion::to_displayed_value(clickedNumber->get_minimum_value(), clickedNumber->get_offset(), clickedNumber->get_scale()),
+							                            NumericValueConversion::to_displayed_value(clickedNumber->get_maximum_value(), clickedNumber->get_offset(), clickedNumber->get_scale()));
 							inputNumberSlider->setNumDecimalPlacesToDisplay(clickedNumber->get_number_of_decimals());
 							inputNumberSlider->setValue(scaledValue, NotificationType::dontSendNotification);
 							inputNumberSlider->setSize(400, 80);
 
-							inputNumberListener.set_last_value(inputNumberSlider->getValue());
+							inputNumberListener.set_last_value(rawValue);
 							inputNumberListener.set_target(clickedNumber);
 							inputNumberSlider->addListener(&inputNumberListener);
 
@@ -638,7 +641,7 @@ void DataMaskRenderAreaComponent::InputNumberListener::sliderValueChanged(Slider
 {
 	if ((nullptr != slider) && (nullptr != targetObject) && (0 != targetObject->get_scale()))
 	{
-		float scaledValue = (slider->getValue() / targetObject->get_scale()) - targetObject->get_offset();
+		double scaledValue = (slider->getValue() / static_cast<double>(targetObject->get_scale())) - static_cast<double>(targetObject->get_offset());
 		lastValue = static_cast<std::uint32_t>(scaledValue);
 	}
 }

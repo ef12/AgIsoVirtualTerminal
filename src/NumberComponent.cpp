@@ -4,6 +4,7 @@
 ** @copyright  The Open-Agriculture Developers
 *******************************************************************************/
 #include "NumberComponent.hpp"
+#include "NumericValueConversion.hpp"
 
 #include <iomanip>
 #include <sstream>
@@ -46,7 +47,7 @@ void NumberComponent::paintNumber(Graphics &g, bool enabled)
 		}
 	}
 
-	float scaledValue = (sourceNumber->get_value() + sourceNumber->get_offset()) * sourceNumber->get_scale();
+	double scaledValue = NumericValueConversion::to_displayed_value(sourceNumber->get_value(), sourceNumber->get_offset(), sourceNumber->get_scale());
 	if (isobus::NULL_OBJECT_ID != sourceNumber->get_variable_reference())
 	{
 		auto child = sourceNumber->get_object_by_id(sourceNumber->get_variable_reference(), parentWorkingSet->get_object_tree());
@@ -54,7 +55,7 @@ void NumberComponent::paintNumber(Graphics &g, bool enabled)
 		if ((nullptr != child) &&
 		    (isobus::VirtualTerminalObjectType::NumberVariable == child->get_object_type()))
 		{
-			scaledValue = (std::static_pointer_cast<isobus::NumberVariable>(child)->get_value() + sourceNumber->get_offset()) * sourceNumber->get_scale();
+			scaledValue = NumericValueConversion::to_displayed_value(std::static_pointer_cast<isobus::NumberVariable>(child)->get_value(), sourceNumber->get_offset(), sourceNumber->get_scale());
 		}
 	}
 
