@@ -239,6 +239,7 @@ ConfigureHardwareComponent::ConfigureHardwareComponent(ConfigureHardwareWindow &
 		}
 
 		bool machineDeviceUpdated = false;
+		bool virtualNetworkCreated = false;
 		if (configuredPCANDriver)
 		{
 			const auto updateResult = CANAPI2MachineDeviceConfiguration::ensure_machine_default_device(requestedMachineDevice);
@@ -264,6 +265,34 @@ ConfigureHardwareComponent::ConfigureHardwareComponent(ConfigureHardwareWindow &
 				return;
 			}
 			machineDeviceUpdated = (CANAPI2MachineDeviceConfiguration::UpdateStatus::Updated == updateResult.status);
+
+			if (CANAPI2MachineDeviceConfiguration::Device::Virtual == requestedMachineDevice)
+			{
+				const auto networkResult = CANAPI2MachineDeviceConfiguration::ensure_virtual_network(
+				  configuredPCANDriver->get_net_name(),
+				  configuredPCANDriver->get_bitrate(),
+				  configuredPCANDriver->get_preferred_net_handle());
+				if (CANAPI2MachineDeviceConfiguration::UpdateStatus::Failed == networkResult.status)
+				{
+					if (driverChanged)
+					{
+						isobus::CANHardwareInterface::unassign_can_channel_frame_handler(0);
+						if (nullptr != previousDriver)
+						{
+							isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, previousDriver);
+						}
+					}
+					restorePCANConfiguration();
+					AlertWindow::showAsync(MessageBoxOptions()
+					                         .withIconType(MessageBoxIconType::WarningIcon)
+					                         .withTitle("Could not create PCAN Virtual network")
+					                         .withMessage(networkResult.message)
+					                         .withButton("OK"),
+					                       nullptr);
+					return;
+				}
+				virtualNetworkCreated = (CANAPI2MachineDeviceConfiguration::UpdateStatus::Updated == networkResult.status);
+			}
 		}
 
 		isobus::CANStackLogger::info("Updated assigned CAN driver to " + selectedDriver->get_name() + ".");
@@ -274,13 +303,13 @@ ConfigureHardwareComponent::ConfigureHardwareComponent(ConfigureHardwareWindow &
 		parent.setVisible(false);
 		parent.parentServer.save_settings();
 #ifdef JUCE_WINDOWS
-		if (machineDeviceUpdated)
+		if (machineDeviceUpdated || virtualNetworkCreated)
 		{
 			const bool usingVirtualDevice = (CANAPI2MachineDeviceConfiguration::Device::Virtual == requestedMachineDevice);
 			AlertWindow::showAsync(MessageBoxOptions()
 			                         .withIconType(MessageBoxIconType::InfoIcon)
-			                         .withTitle("Machine PCAN device updated")
-			                         .withMessage(usingVirtualDevice ? "The machine-wide CAN-API 2 device is now PCAN Virtual. Start the VT before starting or restarting the implement simulator so that the virtual network exists." : "The machine-wide CAN-API 2 device is now PCAN USB. Restart other CAN-API 2 applications so that they use the new device.")
+			                         .withTitle("PCAN configuration updated")
+			                         .withMessage(usingVirtualDevice ? "The machine-wide CAN-API 2 device is now PCAN Virtual and the named network is registered persistently. The VT and implement simulator can be started in either order." : "The machine-wide CAN-API 2 device is now PCAN USB. Restart other CAN-API 2 applications so that they use the new device.")
 			                         .withButton("OK"),
 			                       nullptr);
 		}
@@ -330,7 +359,7 @@ void ConfigureHardwareComponent::paint(Graphics &graphics)
 	else if (is_pcan_api2_selector(hardwareInterfaceSelector.getSelectedId()))
 	{
 		graphics.drawFittedText("PCAN Network Name", canAPI2NetNameEditor.getBounds().getX(), canAPI2NetNameEditor.getBounds().getY() - 14, canAPI2NetNameEditor.getBounds().getWidth(), 12, Justification::centredLeft, 1);
-		const String helpText = (PCAN_VIRTUAL_SELECTOR_ID == hardwareInterfaceSelector.getSelectedId()) ? "Sets the machine default to PCAN Virtual. Start the VT before the implement simulator so this network exists." : "Sets the machine default to PCAN USB. The network must also exist in PEAK Nets Configuration.";
+		const String helpText = (PCAN_VIRTUAL_SELECTOR_ID == hardwareInterfaceSelector.getSelectedId()) ? "Sets the machine default to PCAN Virtual and registers this network persistently, so the VT or implement can start first." : "Sets the machine default to PCAN USB. The network must also exist in PEAK Nets Configuration.";
 		graphics.drawFittedText(helpText, 10, 175, getWidth() - 20, 32, Justification::centredLeft, 2);
 	}
 #elif JUCE_LINUX

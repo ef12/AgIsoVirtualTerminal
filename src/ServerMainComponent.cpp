@@ -17,6 +17,7 @@
 #include "SoftKeyMaskRenderAreaComponent.hpp"
 
 #ifdef JUCE_WINDOWS
+#include "CANAPI2MachineDeviceConfiguration.hpp"
 #include "isobus/hardware_integration/can_api2_windows_plugin.hpp"
 #include "isobus/hardware_integration/toucan_vscp_canal.hpp"
 #elif JUCE_LINUX
@@ -75,6 +76,26 @@ ServerMainComponent::ServerMainComponent(
 	loggerViewport.setVisible(false);
 
 	check_load_settings(settings);
+#ifdef JUCE_WINDOWS
+	const auto configuredDriver = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0);
+	const auto configuredPCANDriver = std::dynamic_pointer_cast<isobus::CANAPI2WindowsPlugin>(configuredDriver);
+	if ((nullptr != configuredPCANDriver) &&
+	    (isobus::CANAPI2WindowsPlugin::DeviceType::Virtual == configuredPCANDriver->get_device_type()))
+	{
+		const auto networkResult = CANAPI2MachineDeviceConfiguration::ensure_virtual_network(
+		  configuredPCANDriver->get_net_name(),
+		  configuredPCANDriver->get_bitrate(),
+		  configuredPCANDriver->get_preferred_net_handle());
+		if (CANAPI2MachineDeviceConfiguration::UpdateStatus::Failed == networkResult.status)
+		{
+			isobus::CANStackLogger::warn("Could not make the PCAN-Virtual network available before VT start: " + networkResult.message);
+		}
+		else if (CANAPI2MachineDeviceConfiguration::UpdateStatus::Updated == networkResult.status)
+		{
+			isobus::CANStackLogger::info("Registered persistent PCAN-Virtual network '" + configuredPCANDriver->get_net_name() + "'.");
+		}
+	}
+#endif
 	canTrafficMonitor.set_capture_enabled(canTrafficMonitorShown);
 
 	if (languageCommandInterface.get_country_code().empty())
@@ -180,6 +201,12 @@ ServerMainComponent::ServerMainComponent(
 
 	setWantsKeyboardFocus(true);
 	addKeyListener(this);
+
+	if (autostart)
+	{
+		isobus::CANStackLogger::info("AutoStart enabled. Starting CAN hardware interface.");
+		start_can_interface();
+	}
 }
 
 ServerMainComponent::~ServerMainComponent()
@@ -925,10 +952,51 @@ bool ServerMainComponent::start_can_interface()
 	const std::string driverName = (nullptr != selectedDriver) ? selectedDriver->get_name() : "selected CAN driver";
 	isobus::CANStackLogger::info("Starting CAN interface using " + driverName);
 
+	const auto internalControlFunction = get_internal_control_function();
+	if ((nullptr != internalControlFunction) &&
+	    (isobus::InternalControlFunction::State::AddressClaimingComplete == internalControlFunction->get_current_state()))
+	{
+		// CANHardwareInterface::stop() leaves the internal control function in its completed
+		// address-claim state. If another ECU starts while the VT is stopped, both devices
+		// otherwise wait indefinitely for an address claim that was sent while they were apart.
+		const auto addressClaimPGN = static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::AddressClaim);
+		const std::uint8_t requestData[] = {
+			static_cast<std::uint8_t>(addressClaimPGN),
+			static_cast<std::uint8_t>(addressClaimPGN >> 8),
+			static_cast<std::uint8_t>(addressClaimPGN >> 16)
+		};
+		const isobus::CANIdentifier requestIdentifier(
+		  isobus::CANIdentifier::Type::Extended,
+		  static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::ParameterGroupNumberRequest),
+		  isobus::CANIdentifier::CANPriority::PriorityDefault6,
+		  isobus::CANIdentifier::GLOBAL_ADDRESS,
+		  isobus::CANIdentifier::NULL_ADDRESS);
+		const isobus::CANMessage addressClaimRequest(
+		  isobus::CANMessage::Type::Receive,
+		  requestIdentifier,
+		  requestData,
+		  sizeof(requestData),
+		  nullptr,
+		  nullptr,
+		  internalControlFunction->get_can_port());
+
+		// Prepare the VT to re-announce as soon as the CAN worker starts. This is done
+		// before start() so it cannot race the worker's address-claim state machine.
+		internalControlFunction->process_rx_message_for_address_claiming(addressClaimRequest);
+	}
+
 	if (isobus::CANHardwareInterface::start())
 	{
 		dataMaskRenderer.set_has_started(true);
 		hasStartBeenCalled = true;
+
+		// Ask every ECU that is already online to announce itself again. Together with
+		// the VT re-announcement above, this makes connection order irrelevant.
+		const std::uint8_t canPort = (nullptr != internalControlFunction) ? internalControlFunction->get_can_port() : 0;
+		if (!isobus::CANNetworkManager::CANNetwork.send_request_for_address_claim(canPort))
+		{
+			isobus::CANStackLogger::warn("CAN interface started, but the address-claim discovery request could not be sent.");
+		}
 		return true;
 	}
 
@@ -2285,12 +2353,6 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 			if (!child.getProperty("AutoStart").isVoid())
 			{
 				autostart = static_cast<bool>(static_cast<int>(child.getProperty("AutoStart")));
-
-				if (autostart)
-				{
-					isobus::CANStackLogger::info("AutoStart enabled. Starting CAN hardware interface.");
-					start_can_interface();
-				}
 			}
 
 			if (!child.getProperty("AlarmAckKey").isVoid())
