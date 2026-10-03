@@ -2459,9 +2459,15 @@ juce::Image ServerMainComponent::capture_screen_image()
 {
 	Image image(Image::PixelFormat::ARGB, dataMaskRenderer.getWidth() + softKeyMaskRenderer.getWidth(), dataMaskRenderer.getHeight(), true);
 	Graphics g(image);
-	dataMaskRenderer.paintEntireComponent(g, false);
+	// Each area is clipped to its own rectangle: a paint() that fills all (the soft key area's
+	// background) would otherwise cover the data mask painted next to it.
 	g.saveState();
-	g.addTransform(juce::AffineTransform::translation(static_cast<float>(dataMaskRenderer.getWidth()), 0.0f));
+	g.reduceClipRegion(dataMaskRenderer.getLocalBounds());
+	dataMaskRenderer.paintEntireComponent(g, false);
+	g.restoreState();
+	g.saveState();
+	g.setOrigin(dataMaskRenderer.getWidth(), 0);
+	g.reduceClipRegion(softKeyMaskRenderer.getLocalBounds());
 	softKeyMaskRenderer.paintEntireComponent(g, false);
 	g.restoreState();
 	return image;
