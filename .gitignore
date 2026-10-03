@@ -47,3 +47,4 @@ CMakeFiles
 
 *.orig
 *.rej
+__pycache__/

@@ -102,6 +102,7 @@ private:
 	juce::var describe(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> &workingSet, const std::shared_ptr<isobus::VTObject> &object) const;
 	juce::var soft_keys(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> &workingSet, const std::shared_ptr<isobus::VTObject> &softKeyMask) const;
 	juce::String text_of(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> &workingSet, const std::shared_ptr<isobus::VTObject> &object) const;
+	juce::String item_text(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> &workingSet, const std::shared_ptr<isobus::VTObject> &item, juce::Array<juce::var> &pictures) const;
 	juce::String texts_below(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> &workingSet, const std::shared_ptr<isobus::VTObject> &object, juce::Array<juce::var> &pictures, int depth) const;
 	std::uint32_t number_raw_value(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> &workingSet, const isobus::NumberVTObject &number) const;
 	std::uint32_t variable_or(const std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> &workingSet, std::uint16_t variableReference, std::uint32_t ownValue) const;

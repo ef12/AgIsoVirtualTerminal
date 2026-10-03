@@ -74,6 +74,7 @@ public:
 
 		std::uint8_t vtNumber = 0;
 		std::string screenCaptureDir;
+		int controlPort = 0;
 		for (const auto &arg : args)
 		{
 			if (arg.startsWith("--vt-number"))
@@ -90,9 +91,19 @@ public:
 			{
 				screenCaptureDir = arg.fromFirstOccurrenceOf("--screen-capture-dir=", false, false).toStdString();
 			}
+
+			if (arg.startsWith("--control-port="))
+			{
+				controlPort = arg.fromFirstOccurrenceOf("--control-port=", false, false).getIntValue();
+				if ((controlPort < 1) || (controlPort > 65535))
+				{
+					std::cout << "The control port must be between 1 and 65535";
+					controlPort = 0;
+				}
+			}
 		}
 
-		mainWindow.reset(new MainWindow(getApplicationNameWithBuildInfo(), logFile, vtNumber, screenCaptureDir));
+		mainWindow.reset(new MainWindow(getApplicationNameWithBuildInfo(), logFile, vtNumber, screenCaptureDir, controlPort));
 	}
 
 	void shutdown() override
@@ -184,8 +195,9 @@ public:
 	 * @param trafficLogger - controllable Vector ASCII CAN traffic recorder
      * @param vtNumberCmdLineArg - in the range of 1 - 32
      * @param screenCaptureDir - path to the directory where the screen capture results will be saved
+     * @param controlPort - TCP port on 127.0.0.1 of the control interface; 0: off
      */
-		MainWindow(juce::String name, ASCIILogFile &trafficLogger, int vtNumberCmdLineArg = 0, std::string screenCaptureDir = "");
+		MainWindow(juce::String name, ASCIILogFile &trafficLogger, int vtNumberCmdLineArg = 0, std::string screenCaptureDir = "", int controlPort = 0);
 
 		/* Note: Be careful if you override any DocumentWindow methods - the base
            class uses a lot of them, so by overriding you might break its functionality.

@@ -174,6 +174,36 @@ cmake -S . -B build -Wno-dev
 cmake --build build --target package --config Release
 ```
 
+## Control interface (test automation)
+
+Started with `--control-port=<port>`, the terminal listens on 127.0.0.1 at that port, so test
+scripts can read what it shows and act as an operator: press soft keys and buttons, and enter
+values into input objects. It is off without the option, and only this PC can connect.
+
+```
+AgISOVirtualTerminal.exe --control-port=9300
+python tools/vt_control.py screen
+python tools/vt_control.py softkey --text "Home"
+python tools/vt_control.py set 12000 --value 3.5
+python tools/vt_control.py wait-mask 1001 --timeout 5
+python tools/vt_control.py screenshot captures/after_home.png
+```
+
+| Command | What it does |
+|---|---|
+| `hello`, `working-sets`, `select INDEX`, `state` | The build, the working sets (address, NAME, pool state), which one is active, its active mask, soft key mask and focused object |
+| `screen [--all] [--hidden]` | The objects on the active mask with their position and their text or value, and the soft keys with their position, key code, text and pictures |
+| `object ID`, `find TEXT` | One object of the active pool (also variables) with its children; the objects and keys showing a text |
+| `softkey ID \| --position N \| --text T`, `button ID \| --text T` | A press and release (`--hold MS`, default 150), with the same messages and macros as a mouse click; only keys and buttons the operator can see |
+| `set ID --value V \| --raw R \| --index I \| --text T` | An input number (as displayed, or raw), boolean (0/1), list item or string, entered as the input dialogs do |
+| `screenshot PATH`, `wait-mask ID`, `wait-text TEXT` | The data mask and soft keys as a PNG; wait until a mask is active or a text is shown |
+
+The protocol is one JSON object a line each way: `{"id": 1, "op": "softkey", "position": 2}` and
+`{"id": 1, "ok": true, "result": {...}}` or `{"id": 1, "ok": false, "error": "..."}`
+(`include/VtControlServer.hpp` lists the ops). Every op runs on the GUI thread, as a mouse click
+does. `tools/vt_control.py` uses only the Python standard library; its `VtControl` class works
+from any script (`python -m unittest discover -s tools` tests it against a fake terminal).
+
 ## Troubleshooting
 
 * On OSX, if you get an error about `libPCBUSB` when trying to run the program, you'll need to allow the file in System Preferences -> Security & Privacy. This is due to our inclusion of the Mac port of the PCAN driver, and isn't something we can control.

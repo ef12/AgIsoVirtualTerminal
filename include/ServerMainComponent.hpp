@@ -17,6 +17,7 @@
 #include <filesystem>
 
 class CANTrafficMonitorWindow;
+class VtControlServer;
 
 class ServerMainComponent : public juce::Component
   , public juce::KeyListener
@@ -31,7 +32,8 @@ public:
 	                    std::shared_ptr<ValueTree> settings,
 	                    ASCIILogFile &trafficLogger,
 	                    std::uint8_t vtNumberArg = 0,
-	                    std::string screenCaptureDir = "");
+	                    std::string screenCaptureDir = "",
+	                    int controlPort = 0);
 	~ServerMainComponent() override;
 
 	bool get_is_enough_memory(std::uint32_t requestedMemory) const override;
@@ -137,6 +139,19 @@ public:
 	void screen_capture(std::uint8_t item, std::uint8_t path, std::shared_ptr<isobus::ControlFunction> requestor) override;
 
 	static std::string getAppDataDir();
+
+	/// @brief The working sets the terminal manages, in the order the working set selector shows them.
+	std::vector<std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet>> get_managed_working_sets() const;
+
+	/// @brief The VT number (1-32) the terminal was started with.
+	std::uint8_t get_vt_number() const;
+
+	/// @brief The data mask and the soft key area as the operator sees them, side by side.
+	juce::Image capture_screen_image();
+
+	/// @brief The port of the control interface (--control-port), 0 when it is off.
+	int get_control_port() const;
+
 	/**
    * @brief minimum_height
    * @return the height of the softkey- or the datamask size, whichever is bigger
@@ -245,6 +260,7 @@ private:
 	std::unique_ptr<AlertWindow> popupMenu;
 	std::unique_ptr<ConfigureHardwareWindow> configureHardwareWindow;
 	std::unique_ptr<CANTrafficMonitorWindow> canTrafficMonitorWindow;
+	std::unique_ptr<VtControlServer> controlServer; ///< The control interface (--control-port), or none
 	std::shared_ptr<isobus::ControlFunction> alarmAckKeyWs;
 	std::vector<std::shared_ptr<isobus::CANHardwarePlugin>> &parentCANDrivers;
 	std::vector<HeldButtonData> heldButtons;

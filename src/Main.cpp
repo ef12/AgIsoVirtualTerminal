@@ -17,7 +17,8 @@
 AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
                                                         ASCIILogFile &trafficLogger,
                                                         int vtNumberCmdLineArg,
-                                                        std::string screenCaptureDir) :
+                                                        std::string screenCaptureDir,
+                                                        int controlPort) :
   DocumentWindow(name,
                  juce::Desktop::getInstance().getDefaultLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId),
                  DocumentWindow::allButtons)
@@ -111,7 +112,7 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 	setUsingNativeTitleBar(false);
 	setTitleBarHeight(38);
 #endif
-	setContentOwned(new ServerMainComponent(serverInternalControlFunction, canDrivers, settings.settingsValueTree(), trafficLogger, vtNumber, screenCaptureDir), true);
+	setContentOwned(new ServerMainComponent(serverInternalControlFunction, canDrivers, settings.settingsValueTree(), trafficLogger, vtNumber, screenCaptureDir, controlPort), true);
 
 #if JUCE_IOS || JUCE_ANDROID
 	setFullScreen(true);

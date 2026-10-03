@@ -11,6 +11,7 @@
 #include "Main.hpp"
 #include "ObjectPoolStorage.hpp"
 #include "ShortcutsWindow.hpp"
+#include "VtControlServer.hpp"
 #include "isobus/isobus/can_general_parameter_group_numbers.hpp"
 #include "isobus/isobus/can_network_manager.hpp"
 #include "isobus/utility/system_timing.hpp"
@@ -46,7 +47,8 @@ ServerMainComponent::ServerMainComponent(
   std::shared_ptr<ValueTree> settings,
   ASCIILogFile &trafficLogger,
   std::uint8_t vtNumberArg,
-  std::string screenCaptureDir) :
+  std::string screenCaptureDir,
+  int controlPort) :
   VirtualTerminalServer(serverControlFunction),
   screenCaptureDirArgument(screenCaptureDir),
   workingSetSelector(*this),
@@ -208,10 +210,26 @@ ServerMainComponent::ServerMainComponent(
 		isobus::CANStackLogger::info("AutoStart enabled. Starting CAN hardware interface.");
 		start_can_interface();
 	}
+
+	if (controlPort > 0)
+	{
+		controlServer = std::make_unique<VtControlServer>(*this, controlPort);
+		if (controlServer->start())
+		{
+			isobus::CANStackLogger::info("Control interface listening on 127.0.0.1:" + std::to_string(controlServer->get_port()));
+		}
+		else
+		{
+			isobus::CANStackLogger::error("Control interface: cannot listen on 127.0.0.1:" + std::to_string(controlPort) + "; is the port taken?");
+			controlServer.reset();
+		}
+	}
 }
 
 ServerMainComponent::~ServerMainComponent()
 {
+	controlServer.reset(); // before anything a request could still reach
+
 	if (isobus::CANHardwareInterface::is_running())
 	{
 		isobus::CANHardwareInterface::stop();
@@ -2370,13 +2388,7 @@ void ServerMainComponent::screen_capture(std::uint8_t item, std::uint8_t path, s
 		return;
 	}
 
-	Image image(Image::PixelFormat::ARGB, dataMaskRenderer.getWidth() + softKeyMaskRenderer.getWidth(), dataMaskRenderer.getHeight(), true);
-	Graphics g(image);
-	dataMaskRenderer.paintEntireComponent(g, false);
-	g.saveState();
-	g.addTransform(juce::AffineTransform::translation(static_cast<float>(dataMaskRenderer.getWidth()), 0.0f));
-	softKeyMaskRenderer.paintEntireComponent(g, false);
-	g.restoreState();
+	auto image = capture_screen_image();
 
 	PNGImageFormat pngFormat;
 	std::unique_ptr<FileOutputStream> stream(saveFile.createOutputStream());
@@ -2431,4 +2443,31 @@ void ServerMainComponent::clear_iso_data()
 std::string ServerMainComponent::getAppDataDir()
 {
 	return juce::String(File::getSpecialLocation(File::userApplicationDataDirectory).getFullPathName() + File::getSeparatorString() + "Open-Agriculture").toStdString();
+}
+
+std::vector<std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet>> ServerMainComponent::get_managed_working_sets() const
+{
+	return managedWorkingSetList;
+}
+
+std::uint8_t ServerMainComponent::get_vt_number() const
+{
+	return vtNumber;
+}
+
+juce::Image ServerMainComponent::capture_screen_image()
+{
+	Image image(Image::PixelFormat::ARGB, dataMaskRenderer.getWidth() + softKeyMaskRenderer.getWidth(), dataMaskRenderer.getHeight(), true);
+	Graphics g(image);
+	dataMaskRenderer.paintEntireComponent(g, false);
+	g.saveState();
+	g.addTransform(juce::AffineTransform::translation(static_cast<float>(dataMaskRenderer.getWidth()), 0.0f));
+	softKeyMaskRenderer.paintEntireComponent(g, false);
+	g.restoreState();
+	return image;
+}
+
+int ServerMainComponent::get_control_port() const
+{
+	return (nullptr != controlServer) ? controlServer->get_port() : 0;
 }

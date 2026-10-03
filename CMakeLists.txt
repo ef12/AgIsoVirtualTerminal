@@ -111,7 +111,9 @@ target_sources(
           "src/VT_NumberComponent.cpp"
           "src/TextDrawingComponent.cpp"
           "src/StringDrawingComponent.cpp"
-          "src/SilVcanPlugin.cpp")
+          "src/SilVcanPlugin.cpp"
+          "src/VtAutomation.cpp"
+          "src/VtControlServer.cpp")
 
 if(WIN32)
   target_sources(AgISOVirtualTerminal
