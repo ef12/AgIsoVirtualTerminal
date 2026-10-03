@@ -76,6 +76,7 @@ target_sources(
           "src/AlarmMaskComponent.cpp"
           "src/DataMaskRenderAreaComponent.cpp"
           "src/JuceManagedWorkingSetCache.cpp"
+          "src/ObjectPoolStorage.cpp"
           "src/OutputRectangleComponent.cpp"
           "src/OutputStringComponent.cpp"
           "src/ButtonComponent.cpp"

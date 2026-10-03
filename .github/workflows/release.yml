@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 env:
-  CAN_STACK_REF: 9db78b52afb6c6e0479df3c2d09d48a7eb307481
+  CAN_STACK_REF: f2386d910e43f1ba25a14cb8b45adde6e3aaba28
   SIL_REF: d8a869322c7a782bb197662deff67045dc353c7c
 
 jobs:

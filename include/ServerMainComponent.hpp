@@ -197,7 +197,7 @@ private:
 
 	static VTVersion get_version_from_setting(std::uint8_t aVersion);
 
-	std::size_t number_of_iop_files_in_directory(std::filesystem::path path);
+	std::filesystem::path object_pool_folder(isobus::NAME clientNAME) const;
 
 	bool timeAndDateCallback(isobus::TimeDateInterface::TimeAndDate &timeAndDateToPopulate);
 	void transferred_object_pool_parse_start(std::shared_ptr<isobus::VirtualTerminalServerManagedWorkingSet> &workingSet) const override;
