@@ -17,8 +17,7 @@ namespace CANAPI2MachineDeviceConfiguration
 	/// @brief A PEAK CAN-API 2 device which can be selected as the machine default.
 	enum class Device
 	{
-		USB,
-		Virtual
+		USB
 	};
 
 	/// @brief Result of requesting a machine-wide device change.
@@ -57,17 +56,6 @@ namespace CANAPI2MachineDeviceConfiguration
 	/// @param[in] device Device to configure as the machine default.
 	/// @returns The result and a user-facing diagnostic message when applicable.
 	UpdateResult ensure_machine_default_device(Device device);
-
-	/// @brief Ensures a named network is registered with the PCAN Virtual driver.
-	/// @details A network registered here is deliberately left available after this process
-	/// exits, allowing another CAN-API 2 application to start before the Virtual Terminal.
-	/// @param[in] netName Network name to make available.
-	/// @param[in] bitrate Network bitrate in bits per second.
-	/// @param[in] preferredNetHandle Preferred network handle in the range 1..32.
-	/// @returns AlreadyConfigured if the network exists, Updated if it was created, or Failed.
-	UpdateResult ensure_virtual_network(const std::string &netName,
-	                                    std::uint32_t bitrate,
-	                                    std::uint8_t preferredNetHandle);
 
 	/// @brief Returns a human-readable summary of the 32-bit and 64-bit machine defaults.
 	std::string get_machine_default_summary();

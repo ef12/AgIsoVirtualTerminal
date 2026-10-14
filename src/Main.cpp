@@ -47,16 +47,6 @@ AgISOVirtualTerminalApplication::MainWindow::MainWindow(juce::String name,
 #else
 	canDrivers.push_back(nullptr);
 #endif
-#ifdef ISOBUS_WINDOWSCANAPI2_AVAILABLE
-	canDrivers.push_back(std::make_shared<isobus::CANAPI2WindowsPlugin>("PCANLight_USB",
-	                                                                    "AgIsoVirtualTerminal",
-	                                                                    isobus::CANAPI2WindowsPlugin::DEFAULT_BITRATE,
-	                                                                    true,
-	                                                                    isobus::CANAPI2WindowsPlugin::DEFAULT_NET_HANDLE,
-	                                                                    isobus::CANAPI2WindowsPlugin::DeviceType::Virtual));
-#else
-	canDrivers.push_back(nullptr);
-#endif
 #elif defined(JUCE_MAC)
 	canDrivers.push_back(std::make_shared<isobus::MacCANPCANPlugin>(PCAN_USBBUS1));
 #else

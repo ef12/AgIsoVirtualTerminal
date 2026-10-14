@@ -19,7 +19,6 @@
 #include "SoftKeyMaskRenderAreaComponent.hpp"
 
 #ifdef JUCE_WINDOWS
-#include "CANAPI2MachineDeviceConfiguration.hpp"
 #include "isobus/hardware_integration/can_api2_windows_plugin.hpp"
 #include "isobus/hardware_integration/toucan_vscp_canal.hpp"
 #elif JUCE_LINUX
@@ -37,7 +36,6 @@
 namespace
 {
 	constexpr std::size_t PCAN_USB_DRIVER_INDEX = 0;
-	constexpr std::size_t PCAN_VIRTUAL_DRIVER_INDEX = 6;
 }
 #endif
 
@@ -79,26 +77,6 @@ ServerMainComponent::ServerMainComponent(
 	loggerViewport.setVisible(false);
 
 	check_load_settings(settings);
-#ifdef JUCE_WINDOWS
-	const auto configuredDriver = isobus::CANHardwareInterface::get_assigned_can_channel_frame_handler(0);
-	const auto configuredPCANDriver = std::dynamic_pointer_cast<isobus::CANAPI2WindowsPlugin>(configuredDriver);
-	if ((nullptr != configuredPCANDriver) &&
-	    (isobus::CANAPI2WindowsPlugin::DeviceType::Virtual == configuredPCANDriver->get_device_type()))
-	{
-		const auto networkResult = CANAPI2MachineDeviceConfiguration::ensure_virtual_network(
-		  configuredPCANDriver->get_net_name(),
-		  configuredPCANDriver->get_bitrate(),
-		  configuredPCANDriver->get_preferred_net_handle());
-		if (CANAPI2MachineDeviceConfiguration::UpdateStatus::Failed == networkResult.status)
-		{
-			isobus::CANStackLogger::warn("Could not make the PCAN-Virtual network available before VT start: " + networkResult.message);
-		}
-		else if (CANAPI2MachineDeviceConfiguration::UpdateStatus::Updated == networkResult.status)
-		{
-			isobus::CANStackLogger::info("Registered persistent PCAN-Virtual network '" + configuredPCANDriver->get_net_name() + "'.");
-		}
-	}
-#endif
 	canTrafficMonitor.set_capture_enabled(canTrafficMonitorShown);
 
 	if (languageCommandInterface.get_country_code().empty())
@@ -2073,19 +2051,6 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 				}
 			}
 
-			const auto virtualNetNameProperty = !child.getProperty("PCANVirtualNetName").isVoid() ? child.getProperty("PCANVirtualNetName") : child.getProperty("CANAPI2NetName");
-			if (!virtualNetNameProperty.isVoid())
-			{
-				auto pcanVirtualDriver = std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(PCAN_VIRTUAL_DRIVER_INDEX));
-				const auto configuredNetName = virtualNetNameProperty.toString().toStdString();
-				if (pcanVirtualDriver->configure(configuredNetName,
-				                                 isobus::CANAPI2WindowsPlugin::DEFAULT_BITRATE,
-				                                 true))
-				{
-					isobus::CANStackLogger::info("Using PCAN-Virtual network name of: " + configuredNetName);
-				}
-			}
-
 			if (!child.getProperty("CANDriver").isVoid())
 			{
 				auto index = static_cast<std::uint32_t>(static_cast<int>(child.getProperty("CANDriver")));
@@ -2094,6 +2059,10 @@ void ServerMainComponent::check_load_settings(std::shared_ptr<ValueTree> setting
 				{
 					isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, parentCANDrivers.at(index));
 					isobus::CANStackLogger::debug("CAN Driver selection loaded from config file.");
+				}
+				else
+				{
+					isobus::CANStackLogger::warn("Saved CAN driver is unavailable. Select a CAN driver in Configure CAN Hardware.");
 				}
 			}
 #elif JUCE_LINUX
@@ -2252,9 +2221,6 @@ void ServerMainComponent::save_settings()
 #ifdef JUCE_WINDOWS
 		hardwareSettings.setProperty("TouCANSerial", static_cast<int>(std::static_pointer_cast<isobus::TouCANPlugin>(parentCANDrivers.at(2))->get_serial_number()), nullptr);
 		hardwareSettings.setProperty("PCANUSBNetName", String(std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(PCAN_USB_DRIVER_INDEX))->get_net_name()), nullptr);
-		hardwareSettings.setProperty("PCANVirtualNetName", String(std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(PCAN_VIRTUAL_DRIVER_INDEX))->get_net_name()), nullptr);
-		// Retain the legacy property so older application versions keep the configured virtual network.
-		hardwareSettings.setProperty("CANAPI2NetName", String(std::static_pointer_cast<isobus::CANAPI2WindowsPlugin>(parentCANDrivers.at(PCAN_VIRTUAL_DRIVER_INDEX))->get_net_name()), nullptr);
 #elif JUCE_LINUX
 		hardwareSettings.setProperty("SocketCANInterface", String(std::static_pointer_cast<isobus::SocketCANInterface>(parentCANDrivers.at(0))->get_device_name()), nullptr);
 #endif
