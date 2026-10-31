@@ -7,7 +7,9 @@
 
 #include "Main.hpp"
 #include "Settings.hpp"
+#ifdef _WIN32
 #include "SilVcanPlugin.hpp"
+#endif
 #include "git.h"
 
 #ifdef ISOBUS_WCAN_AVAILABLE

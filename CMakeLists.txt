@@ -31,7 +31,11 @@ endif()
 
 find_package(JUCE MODULE)
 find_package(CAN_Stack MODULE)
-find_package(SIL MODULE)
+if(WIN32)
+  # SilVcanPlugin is only offered in the Windows CAN driver list (Main.cpp),
+  # and sil_lib's UDP socket layer is Winsock-only.
+  find_package(SIL MODULE)
+endif()
 find_package(git_version MODULE)
 find_package(Threads REQUIRED)
 
@@ -111,14 +115,14 @@ target_sources(
           "src/VT_NumberComponent.cpp"
           "src/TextDrawingComponent.cpp"
           "src/StringDrawingComponent.cpp"
-          "src/SilVcanPlugin.cpp"
           "src/VtAutomation.cpp"
           "src/VtControlServer.cpp")
 
 if(WIN32)
   target_sources(AgISOVirtualTerminal
-                 PRIVATE "src/CANAPI2MachineDeviceConfiguration.cpp")
-  target_link_libraries(AgISOVirtualTerminal PRIVATE Advapi32 Shell32)
+                 PRIVATE "src/CANAPI2MachineDeviceConfiguration.cpp"
+                         "src/SilVcanPlugin.cpp")
+  target_link_libraries(AgISOVirtualTerminal PRIVATE Advapi32 Shell32 sil_lib)
 endif()
 
 target_include_directories(AgISOVirtualTerminal
@@ -132,7 +136,6 @@ target_link_libraries(
           isobus::Isobus
           isobus::HardwareIntegration
           isobus::Utility
-          sil_lib
   PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags
          cmake_git_version_tracking)
 
