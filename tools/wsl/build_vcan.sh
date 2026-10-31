@@ -12,6 +12,7 @@
 # Usage: tools/wsl/build_vcan.sh     (15-25 min; source under ${KERNEL_SRC_ROOT:-~/src})
 # Then:  sudo tools/wsl/install_vcan.sh <path to vcan.ko printed at the end>
 set -euo pipefail
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 KREL=$(uname -r)
 case "$KREL" in
   *microsoft*) ;;
@@ -55,4 +56,4 @@ if grep -q 'WARNING: modpost: .*vcan' "$LOG"; then
 fi
 
 echo "OK: $KO"
-echo "Install with: sudo $(cd "$(dirname "$0")" && pwd)/install_vcan.sh $KO"
+echo "Install with: sudo $SCRIPT_DIR/install_vcan.sh $KO"
