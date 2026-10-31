@@ -1,0 +1,2 @@
+# Shell scripts run in Linux/WSL, also straight from a Windows checkout via /mnt/c.
+*.sh text eol=lf
